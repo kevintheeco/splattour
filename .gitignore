@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.venv/
+tools/
+data/
+scenes/**/*.ply
+scenes/**/*.spz
+scenes/**/*.sog
+docs/checks/
+scratch-*.log
+__pycache__/

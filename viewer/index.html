@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>SplatTour</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view"></canvas>
+      <div id="labels"></div>
+
+      <header id="brand">
+        <div class="brand-title" id="title">SplatTour</div>
+        <div class="brand-sub" id="subtitle"></div>
+        <div class="brand-node" id="nodeName"></div>
+      </header>
+
+      <div id="hint" class="hint">
+        <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><path d="M8 24h7M40 24h-7M11 21l-3 3 3 3M37 21l3 3-3 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="17" y="12" width="14" height="24" rx="7" stroke="currentColor" stroke-width="2.2" fill="none"/><path d="M24 16v5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span>드래그해서 둘러보고,<br />바닥의 원을 눌러 이동하세요</span>
+      </div>
+
+      <nav id="tools">
+        <button data-act="mode" title="이동 방식: 3D 비행 / 파노라마 (비교 실험)"><span class="ico">3D</span></button>
+        <button data-act="auto" title="자동 투어"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <button data-act="map" title="평면도"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 2.2 6 2v11.6l-6-2V6.2z"/></svg></button>
+        <button data-act="free" title="자유 이동 (촬영하지 않은 위치로도 이동)"><svg viewBox="0 0 24 24"><path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z"/></svg></button>
+        <button data-act="fullscreen" title="전체화면"><svg viewBox="0 0 24 24"><path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 3v-3h2v5h-5v-2h3z"/></svg></button>
+        <button data-act="vr" title="VR로 보기" hidden><svg viewBox="0 0 24 24"><path d="M3 7h18a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-5l-2-3h-4l-2 3H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm4.5 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm9 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg></button>
+      </nav>
+
+      <canvas id="minimap" width="560" height="560" hidden></canvas>
+
+      <footer id="strip">
+        <button class="strip-nav" data-dir="-1" aria-label="이전 시점"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="strip-track" id="track"></div>
+        <button class="strip-nav" data-dir="1" aria-label="다음 시점"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      </footer>
+      <button id="stripToggle" aria-label="썸네일 접기"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+
+      <div id="loader">
+        <div class="loader-card">
+          <div class="loader-title" id="loaderTitle">공간을 불러오는 중</div>
+          <div class="bar"><i id="bar"></i></div>
+          <div class="loader-sub" id="loaderSub">0%</div>
+        </div>
+      </div>
+      <div id="toast"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
