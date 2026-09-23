@@ -2,7 +2,7 @@
   "version": 1,
   "title": "Synthetic Apartment",
   "subtitle": "합성 테스트 공간 · 거실·복도·침실",
-  "splat": "scene.ply",
+  "splat": "scene.sog",
   "eyeHeight": 1.55,
   "start": "living-entry",
   "nodes": [
@@ -110,5 +110,56 @@
       "bed-door",
       "bed-desk"
     ]
+  ],
+  "lights": [
+    {
+      "id": "living-ceiling",
+      "name": "거실 천장등",
+      "position": [
+        3.0,
+        2.55,
+        2.5
+      ],
+      "radius": 4.2,
+      "emitter": 0.45,
+      "kelvin": 3000
+    },
+    {
+      "id": "hall-ceiling",
+      "name": "복도등",
+      "position": [
+        7.5,
+        2.55,
+        2.5
+      ],
+      "radius": 2.6,
+      "emitter": 0.45,
+      "kelvin": 3200
+    },
+    {
+      "id": "bed-ceiling",
+      "name": "침실 천장등",
+      "position": [
+        11.5,
+        2.55,
+        2.5
+      ],
+      "radius": 4.0,
+      "emitter": 0.45,
+      "kelvin": 2900
+    },
+    {
+      "id": "desk-lamp",
+      "name": "책상 스탠드",
+      "position": [
+        13.6,
+        1.15,
+        0.6
+      ],
+      "radius": 1.8,
+      "emitter": 0.25,
+      "kelvin": 2700,
+      "gain": 1.6
+    }
   ]
 }

@@ -7,6 +7,8 @@ import { Hotspots } from "./hotspots.js";
 import { Minimap } from "./minimap.js";
 import { PanoMode } from "./panomode.js";
 import { Occupancy } from "./occupancy.js";
+import { Lighting } from "./lighting.js";
+import { TourAudio } from "./audio.js";
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -80,6 +82,95 @@ async function main() {
   nav.headingFn = (p, yaw) => occ.openHeading(p, yaw);
   const hotspots = new Hotspots({ scene, camera, rig, tour, labelLayer: $("#labels") });
   const pano = new PanoMode({ renderer, spark, scene, splat, hideObjects: [hotspots.group, hotspots.cursor] });
+
+  // ---------- lighting & sound ----------
+  const lighting = new Lighting(splat, tour.data.lights || []);
+  const audio = new TourAudio({ tour, camera });
+  setupMood();
+
+  function setupMood() {
+    const bind = (id, key) => {
+      const el = $(id);
+      el.value = lighting.params[key];
+      el.addEventListener("input", () => {
+        lighting.set(key, Number(el.value));
+        document.querySelectorAll("#presets button").forEach((b) => b.classList.remove("on"));
+      });
+    };
+    bind("#sExposure", "exposure");
+    bind("#sKelvin", "kelvin");
+    bind("#sAmbient", "ambient");
+    bind("#sSaturation", "saturation");
+    const syncSliders = () => {
+      for (const [id, key] of [["#sExposure", "exposure"], ["#sKelvin", "kelvin"], ["#sAmbient", "ambient"], ["#sSaturation", "saturation"]]) $(id).value = lighting.params[key];
+    };
+    $("#presets").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      lighting.preset(b.dataset.p);
+      syncSliders();
+      document.querySelectorAll("#presets button").forEach((x) => x.classList.toggle("on", x === b));
+    });
+    const list = $("#lightList");
+    $("#lightsHead").hidden = lighting.lights.length === 0;
+    for (const l of lighting.lights) {
+      const row = document.createElement("div");
+      row.className = "light-row";
+      row.innerHTML = `<span></span><button class="switch" aria-label="켜기/끄기"></button>`;
+      row.querySelector("span").textContent = l.name;
+      const sw = row.querySelector(".switch");
+      sw.classList.toggle("on", l.on);
+      sw.addEventListener("click", () => setLamp(l, !l.on));
+      l.switchEl = sw;
+      list.appendChild(row);
+
+      const lamp = document.createElement("button");
+      lamp.className = "lamp";
+      lamp.title = l.name;
+      lamp.innerHTML = `<svg viewBox="0 0 24 24"><path d="M9 21h6v-1.5H9V21zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg>`;
+      lamp.classList.toggle("on", l.on);
+      lamp.addEventListener("click", (e) => { e.stopPropagation(); setLamp(l, !l.on); });
+      $("#lamps").appendChild(lamp);
+      l.lampEl = lamp;
+    }
+    $("#musicPlay").addEventListener("click", toggleMusic);
+    $("#sVolume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
+  }
+
+  function setLamp(l, on) {
+    lighting.toggle(l.id, on);
+    l.switchEl.classList.toggle("on", on);
+    l.lampEl.classList.toggle("on", on);
+    toast(`${l.name} ${on ? "켜짐" : "꺼짐"}`, 1000);
+  }
+
+  async function toggleMusic() {
+    const on = audio.toggle();
+    $("#musicPlay").textContent = on ? "정지" : "재생";
+    $("#musicPlay").classList.toggle("on", on);
+    document.querySelector('[data-act="music"]').classList.toggle("on", on);
+    $("#musicNow").textContent = on ? (audio.tracks.length ? `♪ ${audio.tracks[audio.trackIndex ?? 0].title}` : "♪ 공간 음악 (실시간 생성)") : "";
+  }
+
+  // Lamp markers: projected into the view, hidden when behind walls.
+  const _lv = new THREE.Vector3();
+  function updateLamps() {
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const eye = camera.getWorldPosition(new THREE.Vector3());
+    for (const l of lighting.lights) {
+      _lv.copy(l.position).project(camera);
+      const d = l.position.distanceTo(eye);
+      let show = _lv.z < 1 && Math.abs(_lv.x) < 1.05 && Math.abs(_lv.y) < 1.05 && d < 12 && lampsVisible;
+      if (show) {
+        const dir = l.position.clone().sub(eye).normalize();
+        show = occ.march(eye, dir, d, 0.15) >= d - Math.max(0.45, l.emitter * 1.2);
+      }
+      l.lampEl.style.display = show ? "" : "none";
+      if (show) l.lampEl.style.transform = `translate(${((_lv.x * 0.5 + 0.5) * w).toFixed(1)}px, ${((-_lv.y * 0.5 + 0.5) * h).toFixed(1)}px)`;
+    }
+  }
+  let lampsVisible = true;
 
   // ---------- thumbnails (rendered from the splat when not supplied) ----------
   const thumbs = new Map();
@@ -318,6 +409,13 @@ async function main() {
     if (!b) return;
     const act = b.dataset.act;
     if (act === "mode") setMode(mode === "splat" ? "pano" : "splat");
+    if (act === "light") {
+      const m = $("#mood");
+      m.hidden = !m.hidden;
+      b.classList.toggle("on", !m.hidden);
+      if (!m.hidden) { $("#minimap").hidden = true; document.querySelector('[data-act="map"]').classList.remove("on"); }
+    }
+    if (act === "music") toggleMusic();
     if (act === "fullscreen") {
       if (document.fullscreenElement) document.exitFullscreen();
       else document.documentElement.requestFullscreen?.();
@@ -326,6 +424,7 @@ async function main() {
       const mm = $("#minimap");
       mm.hidden = !mm.hidden;
       b.classList.toggle("on", !mm.hidden);
+      if (!mm.hidden) { $("#mood").hidden = true; document.querySelector('[data-act="light"]').classList.remove("on"); }
       if (!mm.hidden && !minimap) {
         toast("평면도를 만드는 중…");
         await new Promise((r) => setTimeout(r, 30));
@@ -399,6 +498,9 @@ async function main() {
       updateHover(now);
     }
     pano.update(dt, rig);
+    lighting.update(dt);
+    audio.update();
+    updateLamps();
     hotspots.update(dt, hoverMarker);
     if (minimap && !$("#minimap").hidden) minimap.draw(nav.current);
 
@@ -429,7 +531,7 @@ async function main() {
   });
 
   // Debug / automation hooks (used by the evaluation scripts).
-  window.splattour = { tour, occ, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE };
+  window.splattour = { tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE };
 }
 
 main().catch((err) => {
