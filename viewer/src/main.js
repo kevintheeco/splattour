@@ -82,6 +82,10 @@ async function main() {
 
   const nav = new Navigator({ tour, rig, look });
   nav.headingFn = (p, yaw) => occ.openHeading(p, yaw);
+  // Study parameters: ?speed=<m/s> flight speed, ?vignette=0 turns the comfort vignette off.
+  if (+params.get("speed") > 0) nav.speed = +params.get("speed");
+  const vignetteOn = params.get("vignette") !== "0";
+  const vignette = $("#vignette");
   const hotspots = new Hotspots({ scene, camera, rig, tour, labelLayer: $("#labels") });
   const pano = new PanoMode({ renderer, spark, scene, splat, hideObjects: [hotspots.group, hotspots.cursor] });
 
@@ -527,6 +531,7 @@ async function main() {
     const dt = Math.min(timer.getDelta(), 0.1);
     if (!renderer.xr.isPresenting) {
       nav.update(dt);
+      if (vignetteOn) vignette.style.opacity = nav.busy ? Math.min(1, nav.speedNow / 2.2).toFixed(3) : "0";
       look.update(dt);
       updateHover(now);
     }

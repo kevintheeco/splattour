@@ -169,3 +169,11 @@ input[type="range"].kelvin { background: linear-gradient(90deg, #ff9a3c, #ffd9a8
   #tools button { width: 40px; height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .hint { animation: none; } }
+
+/* Comfort vignette: darkens the periphery while flying (reduces vection-induced
+   discomfort; strength follows flight speed, off when standing still). */
+#vignette {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 1;
+  background: radial-gradient(ellipse 72% 68% at 50% 50%, transparent 55%, rgba(8, 6, 4, 0.55) 100%);
+  will-change: opacity;
+}

@@ -15,7 +15,8 @@ export class Navigator extends EventTarget {
     this.look = look;
     this.current = null;
     this.flight = null;
-    this.speed = 1.8; // metres per second at cruise
+    this.speed = 2.3; // metres per second at cruise (?speed= overrides, for the user study)
+    this.speedNow = 0;
   }
 
   get busy() {
@@ -97,6 +98,8 @@ export class Navigator extends EventTarget {
     if (!f) return;
     f.t = Math.min(f.t + dt / f.T, 1);
     const u = smootherstep(f.t);
+    // metres per second right now (derivative of smootherstep), for the comfort vignette
+    this.speedNow = (30 * f.t * f.t * (1 - f.t) * (1 - f.t) * f.length) / f.T;
     this.rig.position.copy(f.curve.getPointAt(u));
 
     // Heading: ease from the start heading toward the direction of travel,

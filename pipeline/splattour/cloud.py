@@ -17,6 +17,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Callable
@@ -119,15 +120,49 @@ class Ssh:
             time.sleep(10)
         raise TimeoutError("GPU 서버에 ssh로 접속하지 못했습니다")
 
-    def upload_dir(self, src: Path, names: list[str], remote_dir: str) -> None:
-        """tar-stream folders (fast for thousands of files, resumes nothing
-        but needs no extra tools on either side)."""
-        tar = subprocess.Popen([shutil.which("tar") or "tar", "--force-local", "--owner=0", "--group=0", "-cf", "-", "-C", str(src), *names], stdout=subprocess.PIPE)
-        r = subprocess.run(self.base + [f"mkdir -p {remote_dir} && tar --no-same-owner --no-same-permissions -xf - -C {remote_dir}"], stdin=tar.stdout, capture_output=True)
-        tar.stdout.close()
-        tar.wait()
-        if r.returncode != 0 or tar.returncode != 0:
-            raise RuntimeError(f"업로드 실패: {r.stderr.decode(errors='ignore')[-800:]}")
+    def upload_dir(self, src: Path, names: list[str], remote_dir: str, streams: int = 8,
+                   progress: Callable[[int, int], None] | None = None) -> None:
+        """tar-stream the files over `streams` parallel ssh connections.
+        GPU hosts are often on another continent: one TCP stream is limited by
+        latency (measured 0.1-0.3 MB/s Korea→Montana while the line does
+        10 MB/s), so several streams in parallel fill the pipe."""
+        files = sorted(str(f.relative_to(src)).replace("\\", "/") for n in names for f in (src / n).rglob("*") if f.is_file())
+        sizes = {f: (src / f).stat().st_size for f in files}
+        total = sum(sizes.values())
+        groups: list[list[str]] = [[] for _ in range(max(1, min(streams, len(files))))]
+        loads = [0] * len(groups)
+        for f in sorted(files, key=lambda x: -sizes[x]):  # largest first → balanced
+            i = loads.index(min(loads))
+            groups[i].append(f)
+            loads[i] += sizes[f]
+        self.run(f"mkdir -p {remote_dir}")
+        tar_exe = shutil.which("tar") or "tar"
+        procs = []
+        for g in groups:
+            lst = Path(tempfile.mkstemp(suffix=".txt")[1])
+            lst.write_text("\n".join(g), encoding="utf-8")
+            tar = subprocess.Popen([tar_exe, "--force-local", "--owner=0", "--group=0", "-cf", "-", "-C", str(src), "-T", str(lst)], stdout=subprocess.PIPE)
+            ssh = subprocess.Popen(self.base + [f"tar --no-same-owner --no-same-permissions -xf - -C {remote_dir}"], stdin=tar.stdout,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            tar.stdout.close()
+            procs.append((tar, ssh, lst))
+        t0 = time.time()
+        while any(ssh.poll() is None for _, ssh, _ in procs):
+            time.sleep(5)
+            if progress:
+                done = self.run(f"du -sb {remote_dir} | cut -f1", check=False, timeout=30).strip()
+                progress(int(done or 0), total)
+        errs = []
+        for tar, ssh, lst in procs:
+            tar.wait()
+            if ssh.returncode != 0 or tar.returncode != 0:
+                errs.append(ssh.stderr.read().decode(errors="ignore")[-400:])
+            try: lst.unlink()
+            except OSError: pass
+        if errs:
+            raise RuntimeError("업로드 실패: " + " | ".join(errs))
+        mb = total / 2**20
+        print(f"UPLOAD {mb:.0f} MB in {time.time() - t0:.0f}s = {mb / max(1, time.time() - t0):.2f} MB/s over {len(groups)} streams", flush=True)
 
     def download(self, remote: str, local: Path) -> None:
         scp = [shutil.which("scp") or "scp", "-i", self.base[2], "-P", self.base[4], *self.base[5:-1], f"{self.base[-1]}:{remote}", str(local)]
@@ -144,7 +179,8 @@ pip install -q gsplat --index-url https://docs.gsplat.studio/whl/pt24cu124 || pi
 V=$(python -c "import gsplat;print(gsplat.__version__)")
 [ -d gsplat ] || git clone -q --depth 1 --branch v$V https://github.com/nerfstudio-project/gsplat.git || git clone -q --depth 1 https://github.com/nerfstudio-project/gsplat.git
 cd gsplat/examples
-pip install -q -r requirements.txt
+pip install -q ninja
+pip install -q --no-build-isolation -r requirements.txt
 echo SETUP_DONE $V
 """
 
@@ -179,7 +215,8 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         # watchdog: the pod removes itself even if this laptop dies
         ssh.run(f"nohup bash -c 'sleep {int(max_hours * 3600)}; runpodctl remove pod $RUNPOD_POD_ID' >/dev/null 2>&1 &", check=False, log=log)
         note({"phase": "데이터 올리는 중"})
-        ssh.upload_dir(dataset, ["images", "sparse"], "/workspace/data")
+        ssh.upload_dir(dataset, ["images", "sparse"], "/workspace/data",
+                       progress=lambda d, t: note({"phase": "데이터 올리는 중", "step": d, "steps": t}))
         note({"phase": "학습 도구 설치 중"})
         setup = ssh.run(f"bash -lc {shlex.quote(SETUP)}", timeout=3600, log=log)
         info["gsplat"] = (re.findall(r"SETUP_DONE (\S+)", setup) or [""])[0]
