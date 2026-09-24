@@ -7,13 +7,14 @@ const TOUCH = matchMedia("(pointer: coarse)").matches;
 const KEY = "splattour.coached.v1";
 
 const ICONS = {
+  touch: `<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><path d="M20 26V13a3 3 0 0 1 6 0v10l7.2 1.6a3.5 3.5 0 0 1 2.7 4l-1.3 8.4H20.5L14 30.5a2.6 2.6 0 0 1 3.7-3.7L20 29" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12h6M9 12l2.5-2.5M9 12l2.5 2.5M39 12h-6M39 12l-2.5-2.5M39 12l-2.5 2.5" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   look: `<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><path d="M8 24h7M40 24h-7M11 21l-3 3 3 3M37 21l3 3-3 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="17" y="12" width="14" height="24" rx="7" stroke="currentColor" stroke-width="2.2" fill="none"/><path d="M24 16v5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
   move: `<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><ellipse cx="24" cy="34" rx="12" ry="4.5" stroke="currentColor" stroke-width="2.2" fill="none"/><path d="M24 10v17M18 21l6 6 6-6" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   close: `<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><circle cx="21" cy="21" r="10" stroke="currentColor" stroke-width="2.2" fill="none"/><path d="M28.5 28.5 38 38M17 21h8M21 17v8" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`,
 };
 
 const STEPS = [
-  { id: "look", icon: "look", text: TOUCH ? "손가락으로 밀어서<br />주변을 둘러보세요" : "드래그해서<br />주변을 둘러보세요" },
+  { id: "look", icon: TOUCH ? "touch" : "look", text: TOUCH ? "손가락으로 밀어서<br />주변을 둘러보세요" : "드래그해서<br />주변을 둘러보세요" },
   { id: "move", icon: "move", text: TOUCH ? "바닥의 흰 원을 누르면<br />그곳으로 걸어가요" : "바닥의 흰 원을 누르면<br />그곳으로 걸어가요" },
   { id: "close", icon: "close", text: TOUCH ? "궁금한 곳을 두 번 탭하면 가까이 다가가요<br />두 손가락으로 벌리면 확대" : "궁금한 곳을 더블클릭하면 가까이 다가가요<br />휠을 굴리면 확대" },
 ];
