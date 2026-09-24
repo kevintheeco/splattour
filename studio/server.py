@@ -19,7 +19,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pipeline"))
@@ -31,6 +31,31 @@ SCENES = ROOT / "scenes"
 VIEWER_URL = "http://localhost:5190"
 
 app = FastAPI(title="SplatTour Studio")
+
+# Optional password (for when the studio is opened to the internet so a
+# collaborator can upload from her own computer). Put one line in
+# secrets/studio_password.txt; any user name works, the browser asks once.
+STUDIO_PASSWORD = ""
+_pw = ROOT / "secrets" / "studio_password.txt"
+if _pw.exists():
+    STUDIO_PASSWORD = _pw.read_text(encoding="utf-8").strip()
+
+
+@app.middleware("http")
+async def _auth(request: Request, call_next):
+    if STUDIO_PASSWORD:
+        import base64
+        import secrets as _s
+        h = request.headers.get("authorization", "")
+        ok = False
+        if h.lower().startswith("basic "):
+            try:
+                ok = _s.compare_digest(base64.b64decode(h[6:]).decode("utf-8").split(":", 1)[1], STUDIO_PASSWORD)
+            except Exception:
+                ok = False
+        if not ok:
+            return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="SplatTour Studio", charset="UTF-8"'})
+    return await call_next(request)
 work: queue.Queue = queue.Queue()
 
 
