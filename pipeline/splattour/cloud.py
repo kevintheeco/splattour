@@ -178,7 +178,7 @@ python -m pip install -q --upgrade pip
 # Wheel cache from an earlier run (uploaded to /workspace/wheels): installs in
 # a minute instead of compiling fused-ssim & co. for 8-14 minutes.
 if ls /workspace/wheels/*.whl >/dev/null 2>&1; then
-  pip install -q --no-index --find-links /workspace/wheels gsplat || pip install -q gsplat --index-url https://docs.gsplat.studio/whl/pt24cu124
+  pip install -q --no-index --find-links /workspace/wheels gsplat || pip install -q gsplat --index-url https://docs.gsplat.studio/whl/pt24cu124 || pip install -q gsplat
 else
   pip install -q gsplat --index-url https://docs.gsplat.studio/whl/pt24cu124 || pip install -q gsplat
 fi
@@ -198,7 +198,7 @@ else
   # build a cache for next time (only the slow, compiled git packages)
   mkdir -p /workspace/wheels_out
   grep -E "^git\+" requirements.txt | xargs -r pip wheel -q --no-deps --no-build-isolation -w /workspace/wheels_out || true
-  pip download -q gsplat --no-deps -d /workspace/wheels_out --index-url https://docs.gsplat.studio/whl/pt24cu124 || true
+  pip download -q "gsplat==$V" --no-deps -d /workspace/wheels_out || true
 fi
 echo SETUP_DONE $V
 """

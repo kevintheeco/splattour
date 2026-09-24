@@ -96,7 +96,8 @@
       <label class="f">공간 이름<input type="text" id="title" placeholder="예: 북촌 한옥 사랑채" /></label>
       <label class="f">품질
         <select id="quality">
-          <option value="cloud">논문 품질 · 클라우드 GPU (원본 해상도, 약 1시간)</option>
+          <option value="cloud">최고 품질 · 클라우드 GPU (원본 해상도, 약 20분 · 약 300원)</option>
+          <option value="cloud-draft">빠른 확인 · 클라우드 GPU (약 10분 · 약 170원)</option>
           <option value="laptop">빠른 미리보기 · 이 노트북 (저해상도, 약 20분)</option>
         </select>
       </label>
@@ -205,7 +206,7 @@ $("#go").addEventListener("click", async () => {
   const fin = await fetch(`/api/uploads/${r.id}/finish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ backend: q === "cloud" ? "cloud" : "brush", quality: q === "cloud" ? "standard" : "draft" }),
+    body: JSON.stringify({ backend: q.startsWith("cloud") ? "cloud" : "brush", quality: q === "cloud" ? "standard" : "draft" }),
   });
   $("#upState").textContent = fin.ok ? "다 올라갔어요. 아래에서 처리 과정을 볼 수 있어요" : "마무리하지 못했어요. 다시 눌러 주세요";
   setFiles([]);

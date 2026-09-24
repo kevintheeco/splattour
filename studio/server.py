@@ -231,7 +231,9 @@ async def finish_upload(uid: str, spec: dict):
     if (JOBS / name).exists() or (SCENES / name).exists():
         name = f"{name}-{int(time.time()) % 100000}"
     backend = spec.get("backend", "cloud")
-    steps = {"draft": 7000, "standard": 30000}.get(spec.get("quality", "standard"), 30000)
+    quality = spec.get("quality", "standard")
+    # cloud draft: 15k steps ≈ 8 min, $0.12, −0.2 dB vs 30k (docs/QUALITY.md)
+    steps = {"draft": 15000 if backend == "cloud" else 7000, "standard": 30000}.get(quality, 30000)
     media = d / "media"
     media.mkdir(exist_ok=True)
     for f in man["files"]:
