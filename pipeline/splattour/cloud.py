@@ -164,6 +164,20 @@ class Ssh:
         mb = total / 2**20
         print(f"UPLOAD {mb:.0f} MB in {time.time() - t0:.0f}s = {mb / max(1, time.time() - t0):.2f} MB/s over {len(groups)} streams", flush=True)
 
+    def probe_upload(self, mb_per_stream: int = 3, streams: int = 8) -> float:
+        """MB/s this host actually accepts over `streams` parallel ssh streams.
+        RunPod hosts vary a lot (measured 0.2 to 9.6 MB/s from Korea)."""
+        import os
+        import threading
+        blob = os.urandom(mb_per_stream * 2**20)
+        def one():
+            subprocess.run(self.base + ["cat > /dev/null"], input=blob, capture_output=True, timeout=180)
+        t0 = time.time()
+        ts = [threading.Thread(target=one) for _ in range(streams)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        return streams * mb_per_stream / max(0.01, time.time() - t0)
+
     def download(self, remote: str, local: Path) -> None:
         scp = [shutil.which("scp") or "scp", "-i", self.base[2], "-P", self.base[4], *self.base[5:-1], f"{self.base[-1]}:{remote}", str(local)]
         r = subprocess.run(scp, capture_output=True, text=True)
@@ -232,6 +246,25 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         info["cost_per_hr"] = p.get("costPerHr")
         ssh = Ssh(host, port, key)
         ssh.wait_ready()
+        data_mb = sum(f.stat().st_size for n in ("images", "sparse") for f in (dataset / n).rglob("*") if f.is_file()) / 2**20
+        for attempt in range(3):
+            if data_mb < 40:
+                break
+            mbps = ssh.probe_upload()
+            info["upload_probe_mbps"] = round(mbps, 2)
+            log.write(f"\n[upload probe {mbps:.2f} MB/s on {host}]\n")
+            # re-roll a slow host while the upload would take > 5 min
+            if mbps >= 1.5 or data_mb / mbps < 300 or attempt == 2:
+                break
+            note({"phase": "GPU 빌리는 중", "why": f"느린 서버({mbps:.1f}MB/s) → 다른 서버로"})
+            rp.delete(pod_id)
+            pod = rp.create_pod(f"splattour-{out.parent.name}"[:40], pub, community=community)
+            pod_id = pod["id"]
+            info["pod"] = pod_id
+            host, port, p = rp.wait_ssh(pod_id)
+            info["cost_per_hr"] = p.get("costPerHr")
+            ssh = Ssh(host, port, key)
+            ssh.wait_ready()
         # watchdog: the pod removes itself even if this laptop dies
         ssh.run(f"nohup bash -c 'sleep {int(max_hours * 3600)}; runpodctl remove pod $RUNPOD_POD_ID' >/dev/null 2>&1 &", check=False, log=log)
         note({"phase": "데이터 올리는 중"})
