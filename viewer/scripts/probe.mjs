@@ -12,7 +12,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
 page.on("console", (m) => console.log(`[console.${m.type()}] ${m.text()}`));
 page.on("pageerror", (e) => console.log(`[pageerror] ${e.message}`));
 await page.goto(`${process.env.VIEWER_URL || "http://localhost:5190"}/?scene=${scene}`);
-await page.waitForFunction(() => window.splattour, null, { timeout: 180000 });
+await page.waitForFunction(() => window.splattour, null, { timeout: 900000 });
 await page.waitForTimeout(800);
 const result = await page.evaluate(`(async () => { const S = window.splattour; const THREE = S.THREE; ${expr} })()`);
 console.log(JSON.stringify(result, null, 2));

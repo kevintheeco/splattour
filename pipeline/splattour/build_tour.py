@@ -18,6 +18,7 @@ import numpy as np
 from .align import align
 from .colmap_io import find_model_dir, read_model
 from .graph import OccupancyGrid, build_graph
+from .lights import detect_lights
 from .splat_io import read_ply, splat_centers
 
 
@@ -55,6 +56,8 @@ def build_tour(
     occ = OccupancyGrid(xyz_w, op, lo, hi)
     g = build_graph(centers, forwards, occ, floor_y=0.0, spacing=spacing, max_edge=max_edge)
 
+    lights = detect_lights(fields, al.apply, floor_y=0.0, occ=occ)
+
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     splat_name = "scene" + Path(splat_path).suffix
@@ -74,6 +77,7 @@ def build_tour(
         "nodes": g.nodes,
         "edges": [list(e) for e in g.edges],
         "fadeLinks": [list(e) for e in g.stats["fade_links"]],
+        "lights": lights,
     }
     (out / "tour.json").write_text(json.dumps(tour, ensure_ascii=False, indent=2), encoding="utf-8")
     report = {
@@ -84,6 +88,7 @@ def build_tour(
         "num_splats": int(len(fields["x"])),
         "alignment": {**al.info, "scale": al.s},
         "graph": g.stats,
+        "lights": [{k: l[k] for k in ("name", "position", "score", "kind", "shell")} for l in lights],
         "params": {"capture_height": capture_height, "spacing": spacing, "max_edge": max_edge},
         "seconds": round(time.time() - t0, 2),
     }

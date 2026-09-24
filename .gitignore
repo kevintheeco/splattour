@@ -9,3 +9,5 @@ scenes/**/*.sog
 docs/checks/
 scratch-*.log
 __pycache__/
+scratch-*.prof
+scratch_*/

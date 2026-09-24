@@ -91,7 +91,9 @@ def _ransac_floor(points: np.ndarray, up: np.ndarray, iters: int = 2000, thresh:
     inl = np.abs(points @ n + d) < tol
     P = points[inl]
     c = P.mean(0)
-    _, _, vt = np.linalg.svd(P - c)
+    # covariance eigen-decomposition: never materialise the N×N U of a full SVD
+    w, v = np.linalg.eigh((P - c).T @ (P - c))
+    vt = v.T[::-1]
     n2 = vt[2] if np.dot(vt[2], up) > 0 else -vt[2]
     return n2, -np.dot(n2, c), inl
 

@@ -51,7 +51,13 @@ float stFalloff(float d, float r) {
   float w = clamp(1.0 - x * x * x * x, 0.0, 1.0);
   return w * w / (1.0 + 1.5 * x * x);
 }
-vec3 stLight(vec3 p, vec3 n, vec3 c) {
+vec3 stLight(vec3 p, vec3 n, vec3 sc, vec3 c) {
+  // Only flat Gaussians have a trustworthy normal; blobs get even light so
+  // per-splat shading never exposes the splat structure (painterly streaks).
+  float smin = min(sc.x, min(sc.y, sc.z));
+  float smid = sc.x + sc.y + sc.z - smin - max(sc.x, max(sc.y, sc.z));
+  float flat = clamp(1.0 - smin / max(smid, 1e-6), 0.0, 1.0);
+  float nTrust = flat * flat * flat * 0.8;
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
   vec3 carried = vec3(0.0);   // light kept alive by lamps that are on
   float removed = 0.0;        // light taken away by captured lamps now off
@@ -61,7 +67,7 @@ vec3 stLight(vec3 p, vec3 n, vec3 c) {
     if (i >= stNumLights) break;
     vec3 L = stLightPos[i].xyz - p;
     float d = length(L);
-    float lam = 0.15 + 0.85 * abs(dot(n, L / max(d, 1e-4)));
+    float lam = mix(1.0, 0.15 + 0.85 * abs(dot(n, L / max(d, 1e-4))), nTrust);
     float f = stFalloff(d, stLightPos[i].w) * lam * stLightState[i].w;
     float on = stLightState[i].x;
     float captured = stLightState[i].y;
@@ -134,7 +140,7 @@ export class Lighting {
           `${outputs.gsplat} = ${inputs.gsplat};`,
           `{`,
           `  vec3 n = gsplatNormal(${inputs.gsplat}.scales, ${inputs.gsplat}.quaternion);`,
-          `  vec3 c = stLight(${inputs.gsplat}.center, n, ${inputs.gsplat}.rgba.rgb);`,
+          `  vec3 c = stLight(${inputs.gsplat}.center, n, ${inputs.gsplat}.scales, ${inputs.gsplat}.rgba.rgb);`,
           `  ${outputs.gsplat}.rgba.rgb = max(stGrade(c), vec3(0.0));`,
           `}`,
         ],

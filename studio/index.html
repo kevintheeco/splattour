@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SplatTour Studio</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+  :root {
+    --bg: #f6f4f0; --card: #fff; --ink: #1b1a18; --muted: #77726a; --line: #e7e2da;
+    --accent: #2b2a27; --warm: #c8793a; --ok: #3f8a5b; --err: #c0442f; --r: 16px;
+    --shadow: 0 1px 2px rgba(40,30,20,.05), 0 8px 24px -12px rgba(40,30,20,.18);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 28px; }
+  h1 { font-size: 26px; letter-spacing: -0.03em; margin: 0; }
+  h1 span { color: var(--warm); }
+  .lede { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 36px 0 12px; letter-spacing: -0.01em; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
+  .upload { display: grid; grid-template-columns: 1.3fr 1fr; gap: 0; overflow: hidden; }
+  .drop { padding: 36px; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center;
+          text-align: center; min-height: 260px; cursor: pointer; transition: background .2s; }
+  .drop.over { background: #fbf6ef; }
+  .drop .big { font-size: 18px; font-weight: 700; margin: 14px 0 6px; letter-spacing: -0.02em; }
+  .drop .small { color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .drop svg { width: 44px; height: 44px; stroke: var(--warm); fill: none; stroke-width: 1.6; }
+  .files { margin-top: 14px; font-size: 13px; color: var(--ink); max-height: 90px; overflow: auto; }
+  .form { padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+  label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
+  input[type=text], select { height: 42px; border-radius: 10px; border: 1px solid var(--line); padding: 0 12px; font: inherit; font-size: 14px; background: #fff; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+  .check small { color: var(--muted); display: block; font-weight: 400; }
+  button.primary { height: 46px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; transition: transform .15s, opacity .2s; }
+  button.primary:active { transform: scale(.98); }
+  button.primary:disabled { opacity: .4; cursor: default; }
+  .job { padding: 20px 22px; margin-bottom: 12px; }
+  .job-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .job-title { font-weight: 700; font-size: 15px; }
+  .job-state { font-size: 12.5px; color: var(--muted); }
+  .stages { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .stage { font-size: 12px; color: var(--muted); }
+  .stage .bar { height: 5px; border-radius: 5px; background: #eee9e1; margin-bottom: 8px; overflow: hidden; position: relative; }
+  .stage.done .bar { background: var(--ok); }
+  .stage.running .bar::after { content: ""; position: absolute; inset: 0; width: 40%; background: var(--warm); border-radius: 5px; animation: run 1.4s ease-in-out infinite; }
+  .stage.error .bar { background: var(--err); }
+  .stage.done, .stage.running { color: var(--ink); }
+  @keyframes run { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+  .err { margin-top: 12px; font-size: 12px; color: var(--err); white-space: pre-wrap; max-height: 80px; overflow: auto; }
+  .scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .scene { padding: 20px; display: flex; flex-direction: column; gap: 6px; }
+  .scene .t { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+  .scene .s { color: var(--muted); font-size: 13px; min-height: 18px; }
+  .scene .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .scene .row { display: flex; gap: 8px; margin-top: 12px; }
+  .scene a { flex: 1; text-align: center; height: 38px; line-height: 38px; border-radius: 10px; font-size: 13.5px; font-weight: 650; text-decoration: none; }
+  .scene a.open { background: var(--accent); color: #fff; }
+  .scene a.ghost { border: 1px solid var(--line); color: var(--ink); }
+  .empty { color: var(--muted); font-size: 13px; padding: 18px 0; }
+  .guide { padding: 22px 24px; font-size: 13.5px; line-height: 1.75; color: #3b3833; }
+  .guide b { color: var(--ink); }
+  @media (max-width: 760px) { .upload { grid-template-columns: 1fr; } .drop { border-right: 0; border-bottom: 1px solid var(--line); } .stages { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>SplatTour <span>Studio</span></h1>
+      <div class="lede">촬영한 영상이나 사진을 올리면, 걸어 다니며 볼 수 있는 3D 공간 투어로 만들어 줍니다.</div>
+    </div>
+  </header>
+
+  <section class="card upload">
+    <div class="drop" id="drop">
+      <svg viewBox="0 0 48 48"><path d="M24 31V11m0 0-8 8m8-8 8 8M9 30v5a4 4 0 0 0 4 4h22a4 4 0 0 0 4-4v-5"/></svg>
+      <div class="big">촬영 파일을 여기에 끌어다 놓으세요</div>
+      <div class="small">영상(mp4·mov) 또는 사진(jpg·heic) 여러 장<br />360 카메라 영상도 됩니다</div>
+      <div class="files" id="files"></div>
+      <input type="file" id="picker" multiple hidden accept="video/*,image/*,.insv" />
+    </div>
+    <div class="form">
+      <label class="f">공간 이름<input type="text" id="title" placeholder="예: 북촌 한옥 사랑채" /></label>
+      <label class="f">품질
+        <select id="quality">
+          <option value="standard">최고 품질 (30,000단계 · 이 노트북 약 1시간)</option>
+          <option value="draft">빠른 확인 (7,000단계 · 약 15분)</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="pano" /> <span>360° 카메라로 찍었어요<small>인스타360 등으로 찍은 파노라마 영상·사진</small></span></label>
+      <button class="primary" id="go" disabled>투어 만들기</button>
+    </div>
+  </section>
+
+  <h2>처리 중인 작업</h2>
+  <div id="jobs"><div class="empty">아직 작업이 없습니다.</div></div>
+
+  <h2>완성된 공간</h2>
+  <div class="scenes" id="scenes"></div>
+
+  <h2>촬영 요령</h2>
+  <div class="card guide">
+    <b>1. 천천히 걷기.</b> 한 걸음에 1초 정도. 빠르게 돌면 사진이 흐려져 빠집니다.<br />
+    <b>2. 같은 곳을 여러 방향에서.</b> 방 가운데서 한 바퀴, 벽을 따라 한 바퀴. 문지방은 앞뒤로 두 번 지나가세요.<br />
+    <b>3. 한옥이라면.</b> 마당과 대청처럼 밝기 차이가 큰 곳은 문턱에서 잠시 멈춰 카메라가 밝기에 적응하게 하세요. 처마·서까래는 올려다보며 한 번 더 찍어 주세요.<br />
+    <b>4. 사람·움직이는 물건 피하기.</b> 촬영하는 동안 공간이 멈춰 있어야 선명하게 복원됩니다.<br />
+    <b>5. 조명 켜기/끄기를 쓰려면.</b> 같은 공간을 낮(자연광)과 밤(조명만)으로 한 번씩 찍으면 실제 조명 전환이 가능해집니다.
+  </div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+let picked = [];
+let cfg = { viewer: "http://localhost:5190", stages: [] };
+fetch("/api/config").then((r) => r.json()).then((c) => (cfg = c));
+
+const drop = $("#drop");
+drop.addEventListener("click", () => $("#picker").click());
+$("#picker").addEventListener("change", (e) => setFiles([...e.target.files]));
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); setFiles([...e.dataTransfer.files]); });
+$("#title").addEventListener("input", validate);
+
+function setFiles(fs) {
+  picked = fs;
+  const mb = fs.reduce((s, f) => s + f.size, 0) / 1048576;
+  $("#files").textContent = fs.length ? `${fs.length}개 파일 · ${mb.toFixed(0)} MB` : "";
+  validate();
+}
+function validate() { $("#go").disabled = !(picked.length && $("#title").value.trim()); }
+
+$("#go").addEventListener("click", async () => {
+  const fd = new FormData();
+  fd.append("title", $("#title").value.trim());
+  fd.append("panorama", $("#pano").checked);
+  fd.append("quality", $("#quality").value);
+  picked.forEach((f) => fd.append("files", f));
+  $("#go").disabled = true;
+  $("#go").textContent = "올리는 중…";
+  await fetch("/api/jobs", { method: "POST", body: fd });
+  $("#go").textContent = "투어 만들기";
+  setFiles([]);
+  $("#title").value = "";
+  refresh();
+});
+
+const fmtSec = (s) => (s > 90 ? `${Math.round(s / 60)}분` : `${Math.round(s)}초`);
+
+async function refresh() {
+  const [jobs, scenes] = await Promise.all([fetch("/api/jobs").then((r) => r.json()), fetch("/api/scenes").then((r) => r.json())]);
+  const J = $("#jobs");
+  J.innerHTML = jobs.length ? "" : `<div class="empty">아직 작업이 없습니다.</div>`;
+  for (const j of jobs) {
+    const el = document.createElement("div");
+    el.className = "card job";
+    const st = Object.entries(j.stages || {});
+    const cur = st.find(([, v]) => v.status === "running");
+    const err = st.find(([, v]) => v.status === "error");
+    const allDone = st.length && st.every(([, v]) => v.status === "done");
+    const state = err ? "문제가 생겼습니다" : allDone ? "완성" : cur ? `${cur[1].label}…` : j.queued ? "대기 중" : "";
+    el.innerHTML = `<div class="job-head"><div class="job-title"></div><div class="job-state"></div></div><div class="stages"></div>`;
+    el.querySelector(".job-title").textContent = j.title || j.name;
+    el.querySelector(".job-state").textContent = state;
+    const S = el.querySelector(".stages");
+    for (const [, v] of st) {
+      const d = document.createElement("div");
+      d.className = `stage ${v.status}`;
+      d.innerHTML = `<div class="bar"></div><span></span>`;
+      d.querySelector("span").textContent = v.label + (v.seconds ? ` · ${fmtSec(v.seconds)}` : "");
+      S.appendChild(d);
+    }
+    if (err) {
+      const e = document.createElement("div");
+      e.className = "err";
+      e.textContent = err[1].error;
+      el.appendChild(e);
+    }
+    J.appendChild(el);
+  }
+  const G = $("#scenes");
+  G.innerHTML = "";
+  for (const s of scenes) {
+    const el = document.createElement("div");
+    el.className = "card scene";
+    el.innerHTML = `<div class="t"></div><div class="s"></div><div class="meta"></div>
+      <div class="row"><a class="open" target="_blank">투어 열기</a><a class="ghost" target="_blank">편집</a><a class="ghost" target="_blank">비교 실험</a></div>`;
+    el.querySelector(".t").textContent = s.title || s.name;
+    el.querySelector(".s").textContent = s.subtitle;
+    el.querySelector(".meta").textContent = `시점 ${s.nodes}개 · 조명 ${s.lights}개`;
+    const [open, edit, study] = el.querySelectorAll("a");
+    open.href = `${cfg.viewer}/?scene=${encodeURIComponent(s.name)}`;
+    edit.href = `${cfg.viewer}/?scene=${encodeURIComponent(s.name)}&edit=1`;
+    study.href = `${cfg.viewer}/?scene=${encodeURIComponent(s.name)}&mode=pano`;
+    G.appendChild(el);
+  }
+}
+refresh();
+setInterval(refresh, 2500);
+</script>
+</body>
+</html>

@@ -41,7 +41,8 @@ function scenesMiddleware() {
 
 export default defineConfig({
   plugins: [scenesMiddleware()],
-  server: { port: 5190, host: true },
+  // /api goes to the studio server (edit mode saves tours through it)
+  server: { port: 5190, host: true, proxy: { "/api": "http://localhost:5200" } },
   preview: { port: 5191, host: true },
   build: { target: "es2022", chunkSizeWarningLimit: 4000 },
   optimizeDeps: { exclude: ["@sparkjsdev/spark"] },

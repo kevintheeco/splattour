@@ -70,7 +70,9 @@ async function main() {
   });
   applyTransform(splat, tour.splatTransform);
   scene.add(splat);
+  const tLoad = performance.now();
   await splat.initialized;
+  console.info(`[splattour] splat loaded ${splat.packedSplats?.numSplats} in ${Math.round(performance.now() - tLoad)}ms`);
   splat.updateMatrixWorld(true);
   setProgress(1, "공간 준비 중");
 
@@ -202,7 +204,9 @@ async function main() {
     rig.position.copy(saved.pos);
     look.set(saved.yaw, saved.pitch);
   }
+  const tThumbs = performance.now();
   await renderThumbs();
+  console.info(`[splattour] thumbnails in ${Math.round(performance.now() - tThumbs)}ms`);
 
   // ---------- thumbnail strip ----------
   const track = $("#track");
