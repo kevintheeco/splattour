@@ -281,7 +281,7 @@ def _flag(help_text: str, name: str) -> str:
 
 
 def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: int = 2_000_000, max_hours: float = 4.0,
-                       bilateral_grid: bool = False,
+                       bilateral_grid: bool = False, test_every: int = 8,
                        community: bool = False, progress: Callable[[dict], None] | None = None) -> dict:
     """dataset: folder with images/ and sparse/0/ (undistorted PINHOLE)."""
     out.mkdir(parents=True, exist_ok=True)
@@ -362,7 +362,7 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
                 f("no_normalize_world_space") if f("no_normalize_world_space") in help_text else f"{f('normalize_world_space')} False",
                 f("antialiased"), f"{f('strategy.cap_max')} {cap_max}", f"{f('max_steps')} {steps}",
                 f"{f('eval_steps')} {steps}", f"{f('save_steps')} {steps}", f("save_ply"), f"{f('ply_steps')} {steps}",
-                f"{f('test_every')} 8", f("disable_viewer")]
+                f"{f('test_every')} {test_every}", f("disable_viewer")]
         if bilagrid:
             args.append(f("use_bilateral_grid"))
         cmd = " ".join(args)

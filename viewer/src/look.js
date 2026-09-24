@@ -17,6 +17,7 @@ export class LookControls extends EventTarget {
     this.minFov = 20;
     this.maxFov = 95;
     this.fovKick = 0; // added by the navigator while flying
+    this.roll = 0; // camera tilt, only set when matching a photo's pose; eases out once the user drags
     this.velYaw = 0;
     this.velPitch = 0;
     this.enabled = true;
@@ -173,7 +174,8 @@ export class LookControls extends EventTarget {
     }
     if (this.autoRotate && !this.dragging) this.yaw += 0.06 * dt;
 
-    this._euler.set(this.pitch, this.yaw, 0, "YXZ");
+    if (this.roll && this.dragging) this.roll *= Math.pow(0.02, dt);
+    this._euler.set(this.pitch, this.yaw, this.roll, "YXZ");
     this.camera.quaternion.setFromEuler(this._euler);
     const fov = this.fov + this.fovKick;
     if (Math.abs(this.camera.fov - fov) > 1e-3) {

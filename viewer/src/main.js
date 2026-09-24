@@ -10,6 +10,7 @@ import { Occupancy } from "./occupancy.js";
 import { Lighting } from "./lighting.js";
 import { TourAudio } from "./audio.js";
 import { Coach } from "./coach.js";
+import { Photos } from "./photos.js";
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -88,6 +89,11 @@ async function main() {
   const vignetteOn = params.get("vignette") !== "0";
   const vignette = $("#vignette");
   const hotspots = new Hotspots({ scene, camera, rig, tour, labelLayer: $("#labels") });
+  // Source photos: the button appears only when the scene ships them.
+  const photosBtn = document.querySelector('[data-act="photos"]');
+  const photos = new Photos({ tour, nav, look, rig, toast });
+  photos.onClose = () => photosBtn.classList.remove("on");
+  photos.load().then((ok) => { photosBtn.hidden = !ok; }).catch((e) => console.warn("[photos]", e));
   const pano = new PanoMode({ renderer, spark, scene, splat, hideObjects: [hotspots.group, hotspots.cursor] });
 
   // ---------- lighting & sound ----------
@@ -455,8 +461,17 @@ async function main() {
       m.hidden = !m.hidden;
       b.classList.toggle("on", !m.hidden);
       if (!m.hidden) { $("#minimap").hidden = true; document.querySelector('[data-act="map"]').classList.remove("on"); }
+      if (!m.hidden && photos.open) { photos.toggle(false); photos.onClose(); }
     }
     if (act === "music") toggleMusic();
+    if (act === "photos") {
+      const on = photos.toggle();
+      b.classList.toggle("on", on);
+      if (on) {
+        $("#mood").hidden = $("#minimap").hidden = true;
+        document.querySelectorAll('[data-act="light"], [data-act="map"]').forEach((x) => x.classList.remove("on"));
+      }
+    }
     if (act === "fullscreen") {
       if (document.fullscreenElement) document.exitFullscreen();
       else document.documentElement.requestFullscreen?.();
@@ -466,6 +481,7 @@ async function main() {
       mm.hidden = !mm.hidden;
       b.classList.toggle("on", !mm.hidden);
       if (!mm.hidden) { $("#mood").hidden = true; document.querySelector('[data-act="light"]').classList.remove("on"); }
+      if (!mm.hidden && photos.open) { photos.toggle(false); photos.onClose(); }
       if (!mm.hidden && !minimap) {
         toast("평면도를 만드는 중…");
         await new Promise((r) => setTimeout(r, 30));
@@ -599,7 +615,7 @@ async function main() {
   });
 
   // Debug / automation hooks (used by the evaluation scripts).
-  window.splattour = { tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE };
+  window.splattour = { photos, tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE };
 }
 
 main().catch((err) => {

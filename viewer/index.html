@@ -29,6 +29,7 @@
         <button data-act="light" title="조명·분위기"><svg viewBox="0 0 24 24"><path d="M9 21h6v-1.5H9V21zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg></button>
         <button data-act="music" title="음악"><svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg></button>
         <button data-act="auto" title="자동 투어"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <button data-act="photos" title="원본 사진 (이 공간을 만든 사진들)" hidden><svg viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 12h14l-4.5-6-3.5 4.5-2.5-3L5 17zm3.5-6.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg></button>
         <button data-act="map" title="평면도"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 2.2 6 2v11.6l-6-2V6.2z"/></svg></button>
         <button data-act="free" title="자유 이동 (촬영하지 않은 위치로도 이동)"><svg viewBox="0 0 24 24"><path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z"/></svg></button>
         <button data-act="help" title="사용법 다시 보기"><span class="ico">?</span></button>
@@ -54,6 +55,32 @@
         <div class="music-now" id="musicNow"></div>
       </section>
       <div id="lamps"></div>
+
+      <img id="photoOverlay" alt="" hidden />
+      <section id="photos" hidden>
+        <div class="photos-head">
+          <div><div class="mood-head">원본 사진 <span id="photoCount"></span></div><div class="photos-sub">이 공간은 아래 사진들로 만들었어요</div></div>
+          <button id="photoClose" class="x" aria-label="닫기">×</button>
+        </div>
+        <div class="chips two" id="photoOrder"><button data-o="near" class="on">가까운 순</button><button data-o="capture">찍은 순</button></div>
+        <div id="photoGrid"></div>
+      </section>
+      <div id="photoBox" hidden>
+        <figure>
+          <img id="photoImg" alt="원본 사진" />
+          <figcaption>
+            <span id="photoIdx"></span><span id="photoName"></span><span id="photoDist"></span>
+            <button id="photoGo" class="pill on">이 자리에서 3D로 보기</button>
+          </figcaption>
+        </figure>
+        <button id="photoPrev" class="pnav" aria-label="이전 사진"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <button id="photoNext" class="pnav" aria-label="다음 사진"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+        <button id="photoBoxClose" class="x" aria-label="닫기">×</button>
+      </div>
+      <div id="photoCompare" hidden>
+        <span>3D</span><input type="range" id="photoMix" min="0" max="1" step="0.01" value="1" /><span>사진</span>
+        <button id="photoCompareClose" class="x" aria-label="비교 닫기">×</button>
+      </div>
 
       <footer id="strip">
         <button class="strip-nav" data-dir="-1" aria-label="이전 시점"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>

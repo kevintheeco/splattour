@@ -48,7 +48,7 @@ export class Navigator extends EventTarget {
     return this._fly([this.rig.position.clone(), point.clone()], null, opts);
   }
 
-  _fly(points, targetNode, { duration, keepHeading = false, lookAt = null } = {}) {
+  _fly(points, targetNode, { duration, keepHeading = false, lookAt = null, yaw = null, pitch = null } = {}) {
     const length = points.reduce((s, p, i) => (i ? s + p.distanceTo(points[i - 1]) : 0), 0);
     if (length < 0.05) {
       if (targetNode) this._arrive(targetNode);
@@ -73,7 +73,7 @@ export class Navigator extends EventTarget {
     // Don't arrive staring into a wall: turn toward open space if needed.
     // If the travel direction is blocked, look where the photographer looked
     // at that spot: the capture view is guaranteed to face real content.
-    if (this.headingFn && !keepHeading && !lookAt) {
+    if (this.headingFn && !keepHeading && !lookAt && yaw === null) {
       const end = points[points.length - 1];
       let h = this.headingFn(end, endYaw);
       if (targetNode && targetNode.yaw !== undefined && Math.abs(wrapAngle(h - endYaw)) > 0.3) h = this.headingFn(end, targetNode.yaw);
@@ -86,6 +86,10 @@ export class Navigator extends EventTarget {
       endYaw = startYaw + wrapAngle(yawOf(d) - startYaw);
       endPitch = THREE.MathUtils.clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -1.2, 1.2);
     }
+
+    // Exact arrival view (e.g. the pose a source photo was taken from).
+    if (yaw !== null) endYaw = startYaw + wrapAngle(yaw - startYaw);
+    if (pitch !== null) endPitch = pitch;
 
     this.flight = { curve, T, t: 0, startYaw, startPitch, endYaw, endPitch, turn, targetNode, length };
     this.look.velYaw = this.look.velPitch = 0;

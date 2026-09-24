@@ -412,5 +412,6 @@
       "capturedOn": true
     }
   ],
-  "splatMobile": "scene.mobile.spz"
+  "splatMobile": "scene.mobile.spz",
+  "photos": "photos/photos.json"
 }

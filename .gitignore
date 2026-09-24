@@ -13,3 +13,4 @@ scratch-*.prof
 scratch_*/
 secrets/
 web-deploy/
+scenes/**/photos/
