@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>사용 설명서 · SplatTour</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link rel="stylesheet" href="/src/home.css" />
+<link rel="stylesheet" href="/src/manual.css" />
+</head>
+<body>
+<div class="wrap manual">
+  <a class="back" href="/">← 공간 목록</a>
+  <header>
+    <h1>사용 설명서</h1>
+    <p class="lede">SplatTour는 사진이나 영상으로 실제 공간을 3D로 되살려, 그 안을 걸어 다니듯 둘러보게 해 줍니다. 무엇을 할 수 있고 어떻게 조작하는지 정리했어요.</p>
+  </header>
+
+  <nav class="toc card">
+    <a href="#can">할 수 있는 것</a><a href="#upload">공간 올리기</a><a href="#move">둘러보기·이동</a><a href="#tools">오른쪽 도구</a><a href="#photos">원본 사진</a><a href="#vr">VR·360</a><a href="#study">실험용 설정</a><a href="#limits">지금의 한계</a>
+  </nav>
+
+  <h2 id="can">할 수 있는 것</h2>
+  <div class="grid">
+    <div class="card item"><b>공간 올리기</b><p>촬영한 사진·영상을 끌어다 놓으면 3D 투어가 자동으로 만들어져 목록에 올라와요.</p></div>
+    <div class="card item"><b>공간 속을 날아서 이동</b><p>기존 360 투어처럼 장면이 바뀌는 게 아니라, 실제 공간을 지나서 다음 자리로 날아가요.</p></div>
+    <div class="card item"><b>가까이 다가가 보기</b><p>액자·가구를 두 번 누르면 그 앞까지 다가가요. 사진을 확대하는 게 아니라 실제로 가까이 가는 거예요.</p></div>
+    <div class="card item"><b>조명·분위기 바꾸기</b><p>낮·노을·저녁·밤, 밝기와 빛의 색을 바꾸고, 찾아낸 천장등을 하나씩 켜고 끌 수 있어요.</p></div>
+    <div class="card item"><b>원본 사진 보기</b><p>이 공간을 만든 사진을 전부 볼 수 있고, 사진을 찍은 바로 그 자리로 가서 3D와 겹쳐 비교할 수 있어요.</p></div>
+    <div class="card item"><b>기존 방식과 비교</b><p>버튼 하나로 기존 파노라마 투어 방식으로 바꿔 볼 수 있어요(논문 비교 실험용).</p></div>
+  </div>
+
+  <h2 id="upload">공간 올리기</h2>
+  <div class="card body">
+    <ol>
+      <li>첫 화면 <b>공간 올리기</b> 칸에 촬영 파일을 끌어다 놓거나, 칸을 눌러 고릅니다. 폴더째 놓아도 되고 사진(jpg·heic)·영상(mp4·mov) 모두 됩니다.</li>
+      <li><b>공간 이름</b>을 적고, <b>품질</b>을 고릅니다. <em>최고 품질</em>은 약 20분, <em>빠른 확인</em>은 약 10분 걸려요.</li>
+      <li>360 카메라(인스타360 등)로 찍었다면 <b>360° 카메라로 찍었어요</b>에 체크합니다.</li>
+      <li>전달받은 <b>업로드 비밀번호</b>를 넣고 <b>올리고 투어 만들기</b>를 누릅니다.</li>
+      <li>올라가는 동안 막대에 진행률·속도·남은 시간이 보여요. <b>일시정지</b>할 수 있고, 창을 닫았거나 인터넷이 끊겼으면 <b>같은 파일을 다시 고르고 같은 이름으로</b> 누르면 이어서 올라갑니다.</li>
+      <li>다 올라가면 <b>만드는 중</b> 칸에 단계가 표시되고, 끝나면 <b>완성된 공간</b> 목록에 자동으로 나타나요.</li>
+    </ol>
+    <p class="tip">잘 나오게 찍는 법은 첫 화면 아래 <b>촬영 요령</b>을 봐 주세요. 노출·초점 고정, 방마다 세 바퀴, 문지방은 앞뒤로 두 번이 핵심이에요.</p>
+  </div>
+
+  <h2 id="move">둘러보기·이동</h2>
+  <div class="card body">
+    <table class="keys devices">
+      <tr><th>하고 싶은 것</th><th>컴퓨터</th><th>휴대폰</th></tr>
+      <tr><td>주변 둘러보기</td><td>화면을 끌기 · ← → 키(또는 A·D)</td><td>한 손가락으로 끌기</td></tr>
+      <tr><td>다른 자리로 이동</td><td>바닥의 원이나 이름표를 누르기 · ↑(W)/↓(S) 키로 보는 방향 앞뒤 이동</td><td>원·이름표 누르기</td></tr>
+      <tr><td>원하는 곳으로 바로</td><td>아래 썸네일 줄에서 고르기(좌우 화살표로 넘김)</td><td>같음</td></tr>
+      <tr><td>확대·축소</td><td>마우스 휠(가리킨 곳을 중심으로) · + / − 키</td><td>두 손가락 벌리기·오므리기</td></tr>
+      <tr><td>가까이 다가가기</td><td>보고 싶은 물건을 두 번 누르기 · 최대로 확대한 뒤 휠을 더 굴리기</td><td>두 번 누르기</td></tr>
+      <tr><td>처음 안내 다시 보기</td><td>오른쪽 <b>?</b> 버튼</td><td>같음</td></tr>
+    </table>
+    <p class="tip">이동할 때 화면 가장자리가 살짝 어두워지는 건 멀미를 줄이는 장치예요. 이동하면서도 화면을 끌어 둘러볼 수 있어요.</p>
+  </div>
+
+  <h2 id="tools">오른쪽 도구</h2>
+  <div class="card body tools">
+    <div class="tool"><span class="ico txt">3D</span><div><b>이동 방식</b><p>3D 비행 ↔ 360 파노라마(기존 방식). 논문의 비교 조건이에요. 파노라마에서는 다가가기·자유 이동이 꺼져요.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M9 21h6v-1.5H9V21zm3-19a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z"/></svg></span><div><b>조명·분위기</b><p>낮·노을·저녁·밤, 밝기·빛의 색·주변광·채도, 조명 켜고 끄기, 소리 크기. 화면에 뜬 전구 표시를 눌러도 켜고 꺼져요.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg></span><div><b>음악</b><p>공간에 어울리는 배경 음악을 켜고 끕니다.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span><div><b>자동 투어</b><p>시점을 차례로 돌며 천천히 둘러봐요. 화면을 만지면 멈춥니다.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 12h14l-4.5-6-3.5 4.5-2.5-3L5 17zm3.5-6.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg></span><div><b>원본 사진</b><p>이 공간을 만든 사진 목록. 아래 <a href="#photos">원본 사진</a>에서 자세히.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 2.2 6 2v11.6l-6-2V6.2z"/></svg></span><div><b>평면도</b><p>3D에서 자동으로 그린 평면도와 내 위치. 평면도의 점을 누르면 그 자리로 이동해요.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z"/></svg></span><div><b>자유 이동</b><p>켜면 정해진 시점이 아닌 바닥 아무 곳으로나 갈 수 있어요(촬영하지 않은 위치라 조금 덜 선명할 수 있어요).</p></div></div>
+    <div class="tool"><span class="ico txt">?</span><div><b>사용법</b><p>처음 안내(둘러보기 → 이동 → 다가가기)를 다시 보여줘요.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 3v-3h2v5h-5v-2h3z"/></svg></span><div><b>전체화면</b><p>브라우저 화면을 꽉 채워요. Esc로 돌아와요.</p></div></div>
+    <div class="tool"><span class="ico"><svg viewBox="0 0 24 24"><path d="M3 7h18a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-5l-2-3h-4l-2 3H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm4.5 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm9 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg></span><div><b>VR로 보기</b><p>VR 헤드셋 브라우저에서 열었을 때만 나타나요. 아래 <a href="#vr">VR·360</a> 참고.</p></div></div>
+  </div>
+
+  <h2 id="photos">원본 사진</h2>
+  <div class="card body">
+    <ol>
+      <li>오른쪽 <b>원본 사진</b> 버튼을 누르면 이 공간을 만든 사진이 전부 나와요. <b>가까운 순</b>(지금 위치·보는 방향 기준) 또는 <b>찍은 순</b>으로 볼 수 있어요.</li>
+      <li>사진을 누르면 크게 보여요. 좌우 화살표(또는 ← → 키)로 넘기고, Esc나 ×로 닫아요.</li>
+      <li><b>이 자리에서 3D로 보기</b>를 누르면 그 사진을 찍은 정확한 자리·방향으로 날아가고, 사진이 3D 위에 겹쳐져요.</li>
+      <li>아래 막대를 밀면 <b>사진 ↔ 3D</b>가 서서히 바뀌어요. 원본과 3D가 얼마나 같은지 직접 비교할 수 있어요. 화면을 움직이면 겹친 사진은 자동으로 사라져요.</li>
+    </ol>
+  </div>
+
+  <h2 id="vr">VR·360</h2>
+  <div class="card body">
+    <ul>
+      <li><b>VR 헤드셋</b>(메타 퀘스트 등): 헤드셋 안의 브라우저로 이 사이트를 열면 오른쪽 도구에 <b>VR로 보기</b>가 생겨요. 고개를 움직이면 시점이 실제로 따라 움직이는 3D라 파노라마보다 입체감이 커요.</li>
+      <li><b>360 카메라 촬영본</b>: 올릴 때 <b>360° 카메라로 찍었어요</b>에 체크하면 파노라마 영상·사진을 받아서 3D로 만들어요.</li>
+    </ul>
+  </div>
+
+  <h2 id="study">실험용 설정 (주소 뒤에 붙이기)</h2>
+  <div class="card body">
+    <p>투어 주소(<code>/tour.html?scene=이름</code>) 뒤에 <code>&amp;설정=값</code>을 붙여요. 예: <code>/tour.html?scene=drjohnson&amp;mode=pano&amp;onboarding=0</code></p>
+    <table class="keys">
+      <tr><th>설정</th><th>값</th><th>용도</th></tr>
+      <tr><td><code>mode</code></td><td><code>splat</code>(기본) / <code>pano</code></td><td>3D 비행 vs 기존 파노라마 방식</td></tr>
+      <tr><td><code>speed</code></td><td>초당 m (기본 2.3)</td><td>이동 속도 조건</td></tr>
+      <tr><td><code>vignette</code></td><td><code>0</code>이면 끔</td><td>멀미 완화(가장자리 어둡게) 유무</td></tr>
+      <tr><td><code>onboarding</code></td><td><code>0</code> 끔 / <code>1</code> 항상</td><td>처음 안내 표시 여부</td></tr>
+      <tr><td><code>node</code></td><td>시점 id (예: <code>n3</code>)</td><td>시작 위치 고정</td></tr>
+      <tr><td><code>quality</code></td><td><code>full</code> / <code>mobile</code></td><td>화질 강제(기본은 기기에 맞춰 자동)</td></tr>
+      <tr><td><code>study</code></td><td>참가자 번호 (예: <code>P03</code>)</td><td>행동 기록 켜기. 왼쪽 아래 <b>기록 받기</b>로 파일 저장(<code>&amp;badge=0</code>이면 표시 숨김)</td></tr>
+    </table>
+  </div>
+
+  <h2 id="limits">지금의 한계</h2>
+  <div class="card body">
+    <ul>
+      <li>올린 촬영본을 3D로 만드는 작업은 지금 <b>관리자 노트북이 켜져 있을 때</b> 진행돼요. 꺼져 있으면 업로드는 안전하게 쌓여 있다가 켜지면 이어서 처리돼요. (클라우드에서 혼자 돌게 바꾸는 중)</li>
+      <li>VR 헤드셋 실제 기기와 360 카메라 실제 촬영본으로는 아직 시험하지 못했어요.</li>
+      <li>촬영하지 않은 위치(자유 이동, 두 시점 사이)는 찍은 자리보다 덜 선명할 수 있어요.</li>
+      <li>원본 사진 해상도가 선명함의 상한이에요. 확대해서 볼 곳은 가까이서 찍어 주세요.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

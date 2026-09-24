@@ -69,7 +69,13 @@ async function main() {
     back.className = "brand-back";
     back.href = "/";
     back.textContent = "← 공간 목록";
-    $("#brand").prepend(back);
+    const help = document.createElement("a");
+    help.className = "brand-back";
+    help.href = "/manual.html";
+    help.target = "_blank";
+    help.textContent = "사용 설명서";
+    help.style.marginLeft = "6px";
+    $("#brand").prepend(back, help);
   }
 
   const splat = new SplatMesh({

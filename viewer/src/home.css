@@ -58,3 +58,5 @@ button.primary:disabled { opacity: .4; cursor: default; }
   .upload { grid-template-columns: 1fr; }
   .drop { border-right: 0; border-bottom: 1px solid var(--line); min-height: 200px; padding: 28px 20px; }
 }
+.manual-link { color: var(--warm); font-weight: 700; text-decoration: none; white-space: nowrap; }
+.manual-link:hover { text-decoration: underline; }

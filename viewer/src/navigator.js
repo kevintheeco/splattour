@@ -23,6 +23,11 @@ export class Navigator extends EventTarget {
     return !!this.flight;
   }
 
+  // flying, or still finishing the arrival turn
+  get moving() {
+    return !!(this.flight || this.settle);
+  }
+
   jumpTo(node, { yaw = node.yaw, pitch = node.pitch } = {}) {
     this.flight = null;
     this.rig.position.copy(node.position);
@@ -91,6 +96,7 @@ export class Navigator extends EventTarget {
     if (yaw !== null) endYaw = startYaw + wrapAngle(yaw - startYaw);
     if (pitch !== null) endPitch = pitch;
 
+    this.settle = null;
     this.flight = { curve, T, t: 0, startYaw, startPitch, endYaw, endPitch, turn, targetNode, length };
     this.look.velYaw = this.look.velPitch = 0;
     this.dispatchEvent(new CustomEvent("depart", { detail: { target: targetNode, length, duration: T } }));
@@ -98,29 +104,62 @@ export class Navigator extends EventTarget {
   }
 
   update(dt) {
+    const st = this.settle;
+    if (st && !this.flight) {
+      // finish the turn onto the arrival heading smoothly (same spring and cap as in flight)
+      if (this.look.dragging) { this.settle = null; return; }
+      const w = 5.5, cap = (110 * Math.PI) / 180;
+      const target = st.hy + wrapAngle(st.endYaw - st.hy);
+      st.hv = THREE.MathUtils.clamp(st.hv + (w * w * (target - st.hy) - 2 * w * st.hv) * dt, -cap, cap);
+      st.hy += st.hv * dt;
+      st.t += dt;
+      this.look.yaw = st.hy;
+      if ((Math.abs(target - st.hy) < 0.003 && Math.abs(st.hv) < 0.02) || st.t > 1.5) { this.look.yaw = target; this.settle = null; }
+      return;
+    }
     const f = this.flight;
     if (!f) return;
+    f.lastDt = dt;
     f.t = Math.min(f.t + dt / f.T, 1);
     const u = smootherstep(f.t);
     // metres per second right now (derivative of smootherstep), for the comfort vignette
     this.speedNow = (30 * f.t * f.t * (1 - f.t) * (1 - f.t) * f.length) / f.T;
     this.rig.position.copy(f.curve.getPointAt(u));
 
-    // Heading: ease from the start heading toward the direction of travel,
-    // then settle on the final heading. Users may still look around while
-    // flying; their drag is applied on top as an offset.
+    // Heading: look where the path goes (a point ~1.6 m ahead, so corners are
+    // anticipated instead of snapped to), follow it through a critically damped
+    // spring with a turn-rate cap, and blend onto the exact final heading at the
+    // end. Measured before this (scripts/motion-check.mjs): peaks of 400-770°/s
+    // and 3-4 left/right swings on multi-hop routes; now one smooth turn.
     if (!this.look.dragging) {
-      const travelYaw = f.turn > (110 * Math.PI) / 180 ? f.startYaw : yawOf(f.curve.getTangentAt(Math.min(u + 0.08, 1)));
-      const a = THREE.MathUtils.smoothstep(f.t, 0, 0.45);
-      const b = THREE.MathUtils.smoothstep(f.t, 0.6, 1);
-      const mid = f.startYaw + wrapAngle(travelYaw - f.startYaw) * a;
-      this.look.yaw = mid + wrapAngle(f.endYaw - mid) * b;
-      this.look.pitch = THREE.MathUtils.lerp(f.startPitch, f.endPitch, THREE.MathUtils.smoothstep(f.t, 0, 0.7));
+      if (f.hy === undefined) { f.hy = this.look.yaw; f.hv = 0; }
+      const dt = f.lastDt || 1 / 60;
+      let target = f.startYaw;
+      if (f.turn <= (110 * Math.PI) / 180) {
+        const ahead = Math.min(1, u + 1.6 / Math.max(f.length, 0.01));
+        const d = f.curve.getPointAt(ahead).sub(this.rig.position);
+        if (d.x * d.x + d.z * d.z > 1e-4) target = yawOf(d);
+      }
+      // lean toward the final heading as the flight goes on (no snap at the end)
+      target = target + wrapAngle(f.endYaw - target) * THREE.MathUtils.smoothstep(f.t, 0.25, 0.85);
+      target = f.hy + wrapAngle(target - f.hy);
+      const w = 5.5; // spring stiffness (rad/s); critically damped
+      f.hv += (w * w * (target - f.hy) - 2 * w * f.hv) * dt;
+      const cap = (110 * Math.PI) / 180; // max 110°/s while moving
+      f.hv = THREE.MathUtils.clamp(f.hv, -cap, cap);
+      f.hy += f.hv * dt;
+      this.look.yaw = f.hy;
+      this.look.pitch = THREE.MathUtils.lerp(f.startPitch, f.endPitch, THREE.MathUtils.smoothstep(f.t, 0, 0.8));
+    } else if (f.hy !== undefined) {
+      // the user is looking around mid-flight: continue from where they leave the view (no jump back)
+      f.hy = this.look.yaw; f.hv = 0;
     }
-    // A slight FOV widening at cruise speed conveys forward motion.
-    this.look.fovKick = Math.sin(Math.PI * f.t) * Math.min(6, 2 + f.length * 1.2);
+    // A very slight FOV widening at cruise conveys forward motion (was up to 6°,
+    // read as the view "breathing"; capped at 1.5°).
+    this.look.fovKick = Math.sin(Math.PI * f.t) * Math.min(1.5, 0.5 + f.length * 0.3);
 
     if (f.t >= 1) {
+      if (f.hy !== undefined && !this.look.dragging) this.settle = { hy: f.hy, hv: f.hv, endYaw: f.endYaw, t: 0 };
       this.flight = null;
       this.look.fovKick = 0;
       if (f.targetNode) this._arrive(f.targetNode);
