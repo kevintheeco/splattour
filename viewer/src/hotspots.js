@@ -120,7 +120,11 @@ export class Hotspots {
 
       const label = document.createElement("button");
       label.className = "hs-label";
-      label.textContent = n.name;
+      // Hover preview: where this marker leads (thumbnail, name, distance)
+      label.innerHTML = `<i class="hs-thumb"></i><span class="hs-name"></span><em class="hs-dist"></em>`;
+      label.querySelector(".hs-name").textContent = n.name;
+      const th = this.thumbs?.get(n.id);
+      if (th) label.querySelector(".hs-thumb").style.backgroundImage = `url("${th}")`;
       label.addEventListener("click", (e) => {
         e.stopPropagation();
         this.onPick?.(n);
@@ -227,6 +231,7 @@ export class Hotspots {
         m.label.style.transform = `translate(-50%, 14px) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
         m.label.style.opacity = String(Math.min(1, fade + m.hover));
         m.label.classList.toggle("hover", m === hoveredMarker);
+        if (m === hoveredMarker) m.label.querySelector(".hs-dist").textContent = `${d.toFixed(1)}m`;
       }
     }
   }

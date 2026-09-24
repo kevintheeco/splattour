@@ -211,6 +211,8 @@ async function main() {
   }
   const tThumbs = performance.now();
   await renderThumbs();
+  hotspots.thumbs = thumbs;
+  if (nav.current) hotspots.show(nav.current);
   console.info(`[splattour] thumbnails in ${Math.round(performance.now() - tThumbs)}ms`);
 
   // ---------- thumbnail strip ----------

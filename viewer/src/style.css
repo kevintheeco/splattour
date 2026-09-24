@@ -186,3 +186,10 @@ input[type="range"].kelvin { background: linear-gradient(90deg, #ff9a3c, #ffd9a8
 /* coach tips stay legible over white doors and bright windows */
 .hint span { padding: 9px 16px; border-radius: 14px; background: rgba(18, 14, 10, 0.42); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); text-shadow: none; }
 .hint svg { filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.6)); }
+
+/* marker hover preview */
+.hs-label { display: inline-flex; flex-direction: column; align-items: center; gap: 0; }
+.hs-label .hs-thumb { display: block; width: 0; height: 0; border-radius: 8px; background: #222 center / cover no-repeat; transition: width .18s, height .18s, margin .18s; }
+.hs-label .hs-dist { font-style: normal; font-size: 11px; opacity: .7; display: none; }
+.hs-label.hover .hs-thumb, .hs-label:hover .hs-thumb { width: 140px; height: 84px; margin-bottom: 6px; }
+.hs-label.hover .hs-dist, .hs-label:hover .hs-dist { display: block; }
