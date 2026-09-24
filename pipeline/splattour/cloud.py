@@ -411,3 +411,82 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         except OSError:
             pass
         log.close()
+
+
+def train_gsplat_local(dataset: Path, out: Path, steps: int = 30000, cap_max: int = 2_000_000, test_every: int = 8,
+                       progress: Callable[[dict], None] | None = None, workdir: Path = Path("/workspace")) -> dict:
+    """Train on *this* machine's GPU (used on the cloud GPU server itself, where
+    cloudjob.py runs the whole pipeline). Same setup script and trainer flags as
+    train_gsplat_cloud, so results match the SSH-driven path."""
+    import subprocess as sp
+    out.mkdir(parents=True, exist_ok=True)
+    note = progress or (lambda d: None)
+    note({"phase": "학습 도구 설치 중"})
+    t0 = time.time()
+    setup = sp.run(["bash", "-lc", SETUP.replace("/workspace", str(workdir))], capture_output=True, text=True)
+    (out / "setup.log").write_text(setup.stdout + setup.stderr, encoding="utf-8")
+    if setup.returncode != 0:
+        raise RuntimeError("gsplat 설치 실패: " + (setup.stderr or setup.stdout)[-600:])
+    ex = workdir / "gsplat" / "examples"
+    help_text = sp.run(["python", "simple_trainer.py", "mcmc", "--help"], cwd=ex, capture_output=True, text=True).stdout
+    f = lambda n: _flag(help_text, n)  # noqa: E731
+    args = ["python", "simple_trainer.py", "mcmc", f("data_dir"), str(dataset), f("data_factor"), "1", f("result_dir"), str(out / "result"),
+            f("no_normalize_world_space") if f("no_normalize_world_space") in help_text else f("normalize_world_space"),
+            *([] if f("no_normalize_world_space") in help_text else ["False"]),
+            f("antialiased"), f("strategy.cap_max"), str(cap_max), f("max_steps"), str(steps), f("eval_steps"), str(steps),
+            f("save_steps"), str(steps), f("save_ply"), f("ply_steps"), str(steps), f("test_every"), str(test_every or 10**9), f("disable_viewer")]
+    note({"phase": "학습 중", "step": 0, "steps": steps})
+    last, t1 = 0, time.time()
+    with open(out / "train.log", "w", encoding="utf-8") as logf:
+        proc = sp.Popen(args, cwd=ex, stdout=sp.PIPE, stderr=sp.STDOUT, text=True, bufsize=1)
+        buf = ""
+        while True:
+            ch = proc.stdout.read(4096)
+            if not ch:
+                break
+            logf.write(ch)
+            buf = (buf + ch)[-8000:]
+            nums = [int(a or b) for a, b in re.findall(r"Step (\d+)|(\d+)/%d" % steps, buf) if (a or b)]
+            if nums and max(nums) - last >= steps // 100:
+                last = max(nums)
+                note({"phase": "학습 중", "step": last, "steps": steps})
+        proc.wait()
+    plys = sorted((out / "result" / "ply").glob("*.ply"), key=lambda p: p.stat().st_mtime)
+    if not plys:
+        raise RuntimeError(f"학습 결과(.ply)가 없습니다 (exit {proc.returncode}). {out / 'train.log'}")
+    info = {"backend": "gsplat-local", "ply": str(plys[-1]), "steps": steps, "setup_seconds": round(t1 - t0), "train_seconds": round(time.time() - t1),
+            "command": " ".join(args)}
+    stats = sorted((out / "result" / "stats").glob("val_step*.json"))
+    if stats:
+        s = json.loads(stats[-1].read_text())
+        info.update(eval_psnr=s.get("psnr"), eval_ssim=s.get("ssim"), eval_lpips=s.get("lpips"), num_splats=s.get("num_GS"))
+    return info
+
+
+def runner_env() -> dict:
+    """Environment for a cloud runner (cloudjob.py): the *scoped* storage key only."""
+    def kv(p):
+        return {k.strip(): v.strip() for k, v in (l.split("=", 1) for l in (SECRETS / p).read_text(encoding="utf-8-sig").splitlines() if "=" in l)}
+    adm, web = kv("r2.txt"), kv("r2-web.txt")
+    bundle = (SECRETS / "runner_bundle.txt").read_text().strip()
+    return {"R2_ACCOUNT_ID": adm["ACCOUNT_ID"], "R2_ACCESS_KEY_ID": web["ACCESS_KEY_ID"], "R2_SECRET_ACCESS_KEY": web["SECRET_ACCESS_KEY"],
+            "BUNDLE_URL": f"{adm['PUBLIC_URL'].rstrip('/')}/{bundle}", "MAX_HOURS": "5"}
+
+
+RUNNER_CMD = ('mkdir -p /workspace/st && curl -fsSL "$BUNDLE_URL" | tar xz -C /workspace/st && '
+              '(bash /start.sh >/dev/null 2>&1 &) ; bash /workspace/st/runner/boot.sh')
+
+
+def launch_runner(env: dict | None = None, community: bool = False) -> dict:
+    """Start a GPU server that processes every pending web upload and then removes itself.
+    The site's upload API does the same (web-api/api/web/[action].js)."""
+    rp = RunPod()
+    pub = (SECRETS / "splattour_ed25519.pub").read_text().strip()
+    body = {
+        "name": "splattour-runner", "imageName": IMAGE, "gpuTypeIds": GPU_TYPES, "gpuTypePriority": "custom", "gpuCount": 1,
+        "containerDiskInGb": 150, "volumeInGb": 0, "ports": ["22/tcp"], "supportPublicIp": True,
+        "cloudType": "COMMUNITY" if community else "SECURE",
+        "env": {"PUBLIC_KEY": pub, **(env or runner_env())},
+        "dockerStartCmd": ["bash", "-c", RUNNER_CMD],
+    }
+    return rp._req("POST", "/pods", json=body)

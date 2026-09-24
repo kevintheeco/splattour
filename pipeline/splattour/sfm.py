@@ -18,7 +18,7 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 COLMAP = os.environ.get("SPLATTOUR_COLMAP", str(TOOLS / "colmap" / "bin" / "colmap.exe"))
-PANO_SCRIPT = TOOLS / "colmap" / "examples" / "panorama_sfm.py"
+PANO_SCRIPT = Path(os.environ.get("SPLATTOUR_PANO_SCRIPT", TOOLS / "colmap" / "examples" / "panorama_sfm.py"))
 
 
 def _run(args: list[str], log: Path) -> None:
@@ -34,6 +34,8 @@ def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int
             ordered: bool = False) -> dict:
     """images: folder of jpgs. work: output workspace. Returns timing + paths.
     Result: work/dense/{images, sparse/0} undistorted, ready for training."""
+    if not Path(COLMAP).exists() or os.environ.get("SPLATTOUR_SFM") == "pycolmap":
+        return run_sfm_pycolmap(images, work, matcher=matcher, max_image_size=max_image_size, ordered=ordered)
     work.mkdir(parents=True, exist_ok=True)
     log = work / "colmap.log"
     db = work / "database.db"
@@ -89,13 +91,92 @@ def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int
     return {"images": n, "dropped_cameras": dropped, "matcher": matcher, "mapper": mapper, "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense)}
 
 
+def _pick_matcher(n: int, ordered: bool) -> str:
+    return "exhaustive" if n <= 150 else ("sequential" if ordered else "vocab")
+
+
+def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_size: int = 1600, ordered: bool = False) -> dict:
+    """Same steps and settings as run_sfm, through the pycolmap API (pycolmap-cuda12 on
+    the cloud GPU: SIFT extraction and matching on the GPU). Used where the COLMAP
+    executable is not installed (Linux GPU servers)."""
+    iso = os.environ.get("SPLATTOUR_SFM_PYTHON")
+    if iso and Path(iso).resolve() != Path(sys.executable).resolve():
+        # On the GPU server gsplat's tools ship a different package also named
+        # "pycolmap"; SfM runs in its own environment to keep the two apart.
+        import json as _json
+        work.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run([iso, "-m", "splattour.sfm", str(images), str(work), matcher, str(max_image_size), "1" if ordered else "0"],
+                           capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]))
+        (work / "sfm_stdout.log").write_text(r.stdout + r.stderr, encoding="utf-8")
+        if r.returncode != 0:
+            raise RuntimeError("SfM failed: " + (r.stderr or r.stdout)[-800:])
+        return _json.loads(r.stdout.strip().splitlines()[-1])
+    import pycolmap
+    work.mkdir(parents=True, exist_ok=True)
+    log = work / "colmap.log"
+    db = work / "database.db"
+    if db.exists():
+        db.unlink()
+    n = len(list(images.glob("*.jpg")))
+    if matcher == "auto":
+        matcher = _pick_matcher(n, ordered)
+    dev = pycolmap.Device.cuda if pycolmap.has_cuda else pycolmap.Device.cpu
+    t = {}
+    t0 = time.time()
+    reader = pycolmap.ImageReaderOptions()
+    reader.camera_model = "OPENCV"
+    ext = pycolmap.FeatureExtractionOptions()
+    ext.max_image_size = max_image_size
+    pycolmap.extract_features(db, images, camera_mode=pycolmap.CameraMode.SINGLE, reader_options=reader, extraction_options=ext, device=dev)
+    t["features"] = time.time() - t0
+    t0 = time.time()
+    if matcher == "exhaustive":
+        pycolmap.match_exhaustive(db, device=dev)
+    elif matcher == "vocab":
+        po = pycolmap.VocabTreePairingOptions()
+        po.num_images = min(60, max(20, n // 5))
+        pycolmap.match_vocabtree(db, pairing_options=po, device=dev)
+    else:
+        po = pycolmap.SequentialPairingOptions()
+        po.overlap, po.quadratic_overlap, po.loop_detection = 15, True, True
+        pycolmap.match_sequential(db, pairing_options=po, device=dev)
+    t["matching"] = time.time() - t0
+    t0 = time.time()
+    sparse = work / "sparse"
+    sparse.mkdir(exist_ok=True)
+    recs = pycolmap.global_mapping(db, images, sparse)
+    if not recs:
+        raise RuntimeError("SfM produced no model")
+    best = max(recs.values(), key=lambda r: r.num_reg_images())
+    model = sparse / "best"
+    model.mkdir(exist_ok=True)
+    best.write(model)
+    t["mapping"] = time.time() - t0
+    t0 = time.time()
+    dense = work / "dense"
+    pycolmap.undistort_images(dense, model, images, output_type="COLMAP")
+    s = dense / "sparse"
+    if (s / "cameras.bin").exists():
+        (s / "0").mkdir(exist_ok=True)
+        for f in ("cameras.bin", "images.bin", "points3D.bin", "rigs.bin", "frames.bin"):
+            if (s / f).exists():
+                os.replace(s / f, s / "0" / f)
+    t["undistort"] = time.time() - t0
+    dropped = clean_model(s / "0", log)
+    with open(log, "a", encoding="utf-8") as f:
+        f.write(f"pycolmap {pycolmap.__version__} cuda={pycolmap.has_cuda} matcher={matcher} registered={best.num_reg_images()}/{n}\n")
+    return {"images": n, "registered": best.num_reg_images(), "dropped_cameras": dropped, "matcher": matcher, "mapper": "global",
+            "backend": f"pycolmap-{'cuda' if pycolmap.has_cuda else 'cpu'}", "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense)}
+
+
 def run_panorama_sfm(images: Path, work: Path, matcher: str = "sequential") -> dict:
     """Equirectangular frames → virtual perspective rig → SfM."""
     work.mkdir(parents=True, exist_ok=True)
     log = work / "colmap.log"
     t0 = time.time()
-    _run([sys.executable, PANO_SCRIPT, "--input_image_path", images, "--output_path", work,
-          "--matcher", matcher, "--mapper", "global", "--pano_render_type", "perspective_overlapping", "--use_cpu"], log)
+    _run([os.environ.get("SPLATTOUR_SFM_PYTHON") or sys.executable, PANO_SCRIPT, "--input_image_path", images, "--output_path", work,
+          "--matcher", matcher, "--mapper", "global", "--pano_render_type", "perspective_overlapping",
+          *([] if os.environ.get("SPLATTOUR_GPU") == "1" else ["--use_cpu"])], log)
     model = _largest_model(work / "sparse")
     return {"images": len(list(images.glob("*.jpg"))), "mode": "panorama-rig", "seconds": {"total": round(time.time() - t0, 1)},
             "dataset": str(work), "model": str(model)}
@@ -120,7 +201,16 @@ def clean_model(model: Path, log: Path) -> list[str]:
     names = raw / "dropped.txt"
     names.write_bytes(chr(10).join(dropped).encode("utf-8"))
     model.mkdir()
-    _run([COLMAP, "image_deleter", "--input_path", raw, "--output_path", model, "--image_names_path", names], log)
+    if Path(COLMAP).exists():
+        _run([COLMAP, "image_deleter", "--input_path", raw, "--output_path", model, "--image_names_path", names], log)
+    else:  # no executable (cloud): same operation through pycolmap
+        import pycolmap
+        rec = pycolmap.Reconstruction(raw)
+        drop = set(dropped)
+        for iid, im in list(rec.images.items()):
+            if im.name in drop:
+                rec.deregister_frame(im.frame_id)
+        rec.write(model)
     return dropped
 
 
@@ -129,3 +219,11 @@ def _largest_model(sparse: Path) -> Path:
     if not cands:
         raise RuntimeError(f"SfM produced no model in {sparse}")
     return max(cands, key=lambda p: (p / "images.bin").stat().st_size)
+
+
+if __name__ == "__main__":  # isolated SfM run (see run_sfm_pycolmap)
+    import json as _json
+    a = sys.argv[1:]
+    os.environ.pop("SPLATTOUR_SFM_PYTHON", None)
+    res = run_sfm_pycolmap(Path(a[0]), Path(a[1]), matcher=a[2], max_image_size=int(a[3]), ordered=a[4] == "1")
+    print(_json.dumps(res))

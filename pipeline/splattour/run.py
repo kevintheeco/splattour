@@ -73,7 +73,7 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
         stage = "ingest"
         if not job.done(stage):
             job.start(stage)
-            side = max_side or (3840 if panorama else 3200 if backend == "cloud" else 1600)
+            side = max_side or (3840 if panorama else 3200 if backend in ("cloud", "gpu-local") else 1600)
             job.finish(stage, **ingest(inputs, images, max_side=side))
         stage = "sfm"
         if not job.done(stage):
@@ -86,7 +86,15 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
         stage = "train"
         if not job.done(stage):
             job.start(stage)
-            if backend == "cloud":
+            if backend == "gpu-local":  # running on the cloud GPU server itself (cloudjob.py)
+                from .cloud import train_gsplat_local
+
+                def progress(d):
+                    job.state["stages"]["train"]["progress"] = d
+                    job.save()
+                job.finish(stage, **train_gsplat_local(dataset, job.dir / "train", steps=steps, cap_max=max_splats,
+                                                       test_every=test_every, progress=progress))
+            elif backend == "cloud":
                 from .cloud import train_gsplat_cloud
 
                 def progress(d):

@@ -44,6 +44,60 @@ async function s3(method, key, query = "", body) {
   return text;
 }
 
+
+// ---------- cloud runner (a RunPod GPU server that processes every pending upload, then removes itself) ----------
+const IMAGE = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04"; // same as pipeline/splattour/cloud.py
+const GPU_TYPES = ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA RTX 6000 Ada Generation", "NVIDIA RTX A6000",
+  "NVIDIA A100 80GB PCIe", "NVIDIA A100-SXM4-80GB", "NVIDIA GeForce RTX 5090"];
+const RUNNER_CMD = 'mkdir -p /workspace/st && curl -fsSL "$BUNDLE_URL" | tar xz -C /workspace/st && (bash /start.sh >/dev/null 2>&1 &) ; bash /workspace/st/runner/boot.sh';
+
+async function getJson(key) {
+  const res = await r2().fetch(objUrl(key));
+  if (!res.ok) return null;
+  try { return await res.json(); } catch { return null; }
+}
+
+async function setJob(id, fields) {
+  const idx = (await getJson("jobs/index.json")) || { jobs: [] };
+  const jobs = idx.jobs || [];
+  let j = jobs.find((x) => x.id === id);
+  if (!j) { j = { id }; jobs.unshift(j); }
+  Object.assign(j, fields);
+  await s3("PUT", "jobs/index.json", "", JSON.stringify({ jobs: jobs.slice(0, 40), at: Date.now() / 1000 }));
+}
+
+async function monthSpend() {
+  const month = new Date().toISOString().slice(0, 7);
+  const xml = await s3("GET", "", `?list-type=2&prefix=${encodeURIComponent(`cloud/ledger/${month}/`)}`).catch(() => "");
+  const keys = [...xml.matchAll(/<Key>([^<]+)<\/Key>/g)].map((m) => m[1]);
+  let sum = 0;
+  for (const k of keys) sum += +((await getJson(k)) || {}).cost_usd || 0;
+  return sum;
+}
+
+async function ensureRunner() {
+  const hb = await getJson("cloud/active.json");
+  if (hb && Date.now() / 1000 - hb.at < 300) return "running"; // a live server picks the new upload up
+  const budget = +(E.BUDGET_USD || 100);
+  if ((await monthSpend()) >= budget) return "over-budget";
+  const body = {
+    name: "splattour-runner", imageName: IMAGE, gpuTypeIds: GPU_TYPES, gpuTypePriority: "custom", gpuCount: 1,
+    containerDiskInGb: 150, volumeInGb: 0, ports: ["22/tcp"], supportPublicIp: true, cloudType: "SECURE",
+    env: {
+      R2_ACCOUNT_ID: E.R2_ACCOUNT_ID, R2_ACCESS_KEY_ID: E.R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY: E.R2_SECRET_ACCESS_KEY,
+      BUNDLE_URL: `${(E.R2_PUBLIC_URL || "").replace(/\/$/, "")}/${E.RUNNER_BUNDLE}`, MAX_HOURS: "5",
+      ...(E.RUNNER_PUBLIC_KEY ? { PUBLIC_KEY: E.RUNNER_PUBLIC_KEY } : {}),
+    },
+    dockerStartCmd: ["bash", "-c", RUNNER_CMD],
+  };
+  const res = await fetch("https://rest.runpod.io/v1/pods", { method: "POST", headers: { Authorization: `Bearer ${E.RUNPOD_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`RunPod ${res.status}: ${JSON.stringify(j).slice(0, 200)}`);
+  // provisional heartbeat so a second upload a moment later doesn't start another server
+  await s3("PUT", "cloud/active.json", "", JSON.stringify({ pod: j.id, at: Date.now() / 1000, starting: true }));
+  return `started ${j.id}`;
+}
+
 export default async function handler(req, res) {
   const action = req.query.action;
   res.setHeader("Cache-Control", "no-store");
@@ -104,8 +158,17 @@ export default async function handler(req, res) {
         panorama: !!b.panorama, files: (b.files || []).filter((f) => inInbox(b.id, f.key)).map((f) => ({ name: String(f.name), size: +f.size, key: f.key })),
         finishedAt: new Date().toISOString(),
       };
+      const cloud = !!(E.RUNPOD_API_KEY && E.RUNNER_BUNDLE);
+      if (cloud) manifest.runner = "cloud"; // processed by a cloud GPU server (pipeline/splattour/cloudjob.py)
       await s3("PUT", `inbox/${b.id}/manifest.json`, "", JSON.stringify(manifest));
-      return res.status(200).json({ ok: true });
+      let runner = "laptop";
+      if (cloud) {
+        try { runner = await ensureRunner(); } catch (e) { runner = `error: ${String(e.message || e).slice(0, 160)}`; }
+        await setJob(b.id, runner.startsWith("error") || runner === "over-budget"
+          ? { title: manifest.title, state: "error", error: runner === "over-budget" ? "이번 달 클라우드 한도를 넘어서 멈췄어요" : "GPU 서버를 켜지 못했어요", label: "" }
+          : { title: manifest.title, state: "queued", label: "GPU 서버 준비 중", error: "" });
+      }
+      return res.status(200).json({ ok: true, runner });
     }
     return res.status(404).json({ error: "unknown action" });
   } catch (e) {

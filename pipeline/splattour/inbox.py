@@ -129,6 +129,8 @@ class Bridge:
                 man = json.loads(s3.get_object(Bucket=BUCKET, Key=f"inbox/{uid}/manifest.json")["Body"].read())
             except s3.exceptions.NoSuchKey:
                 continue  # still uploading
+            if man.get("runner") == "cloud":
+                continue  # a cloud GPU server processes this one (cloudjob.py)
             web[uid] = {"title": man["title"], "state": "downloading", "label": "받는 중", "at": time.time()}
             self.save()
             self.publish_jobs(s3)
@@ -170,8 +172,17 @@ class Bridge:
         self.publish_jobs(s3)
 
     def publish_jobs(self, s3):
-        jobs = [{"id": uid, "title": w["title"], "state": w["state"], "label": w.get("label", ""), "error": w.get("error", ""), "scene": w.get("scene")}
-                for uid, w in sorted(self.state["web"].items(), key=lambda x: -x[1].get("at", 0))][:30]
+        """Merge this machine's jobs into jobs/index.json; entries written by a cloud
+        runner (cloudjob.py) or the upload API are left untouched."""
+        mine = {uid: {"id": uid, "title": w["title"], "state": w["state"], "label": w.get("label", ""), "error": w.get("error", ""), "scene": w.get("scene")}
+                for uid, w in self.state["web"].items()}
+        try:
+            idx = json.loads(s3.get_object(Bucket=BUCKET, Key="jobs/index.json")["Body"].read())
+        except Exception:  # noqa: BLE001
+            idx = {"jobs": []}
+        others = [j for j in idx.get("jobs", []) if j.get("id") not in mine]
+        ordered = sorted(mine.values(), key=lambda j: -self.state["web"][j["id"]].get("at", 0))
+        jobs = (ordered + others)[:40]
         s3.put_object(Bucket=BUCKET, Key="jobs/index.json", Body=json.dumps({"jobs": jobs, "at": time.time()}, ensure_ascii=False).encode(),
                       ContentType="application/json", CacheControl="no-cache")
 
