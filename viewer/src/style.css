@@ -243,3 +243,5 @@ input[type="range"].kelvin { background: linear-gradient(90deg, #ff9a3c, #ffd9a8
   .pnav { top: auto; bottom: 18px; transform: none; }
   #photoCompare { bottom: 118px; }
 }
+.brand-back { display: inline-block; margin-bottom: 8px; pointer-events: auto; font-size: 12.5px; font-weight: 650; color: var(--muted); text-decoration: none; padding: 4px 10px; border-radius: 8px; background: var(--glass); backdrop-filter: blur(10px); }
+.brand-back:hover { color: var(--text); background: var(--glass-strong); }

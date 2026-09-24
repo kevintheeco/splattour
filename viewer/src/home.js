@@ -8,6 +8,9 @@ const VIDEO = /\.(mp4|mov|m4v|avi|mkv|insv|webm)$/i;
 const PARALLEL = 4;
 
 let cfg = { uploads: false, storage: "" };
+// Published site: home is "/", the viewer is /tour.html (old "/?scene=" links are forwarded).
+const TOUR = import.meta.env.PROD ? "/tour.html" : "/";
+if (new URLSearchParams(location.search).has("scene")) location.replace(TOUR + location.search);
 let picked = [];
 let uploading = null;
 
@@ -259,8 +262,8 @@ async function refresh() {
     cfg.storage ? getJson(`${cfg.storage}/jobs/index.json`) : null,
   ]);
   const scenes = [
-    ...(local?.scenes || []).map((s) => ({ ...s, href: `/?scene=${encodeURIComponent(s.name)}`, base: `/scenes/${encodeURIComponent(s.name)}/` })),
-    ...(remote?.scenes || []).map((s) => ({ ...s, href: `/?scene=${encodeURIComponent(s.name)}&from=cloud`, base: `${cfg.storage}/scenes/${encodeURIComponent(s.name)}/` })),
+    ...(local?.scenes || []).map((s) => ({ ...s, href: `${TOUR}?scene=${encodeURIComponent(s.name)}`, base: `/scenes/${encodeURIComponent(s.name)}/` })),
+    ...(remote?.scenes || []).map((s) => ({ ...s, href: `${TOUR}?scene=${encodeURIComponent(s.name)}&from=cloud`, base: `${cfg.storage}/scenes/${encodeURIComponent(s.name)}/` })),
   ];
   const G = $("#scenes");
   G.textContent = "";

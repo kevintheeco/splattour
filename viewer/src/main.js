@@ -63,6 +63,14 @@ async function main() {
   $("#title").textContent = tour.title;
   $("#subtitle").textContent = tour.subtitle;
   $("#loaderTitle").textContent = tour.title;
+  // Published site: a way back to the list/upload home.
+  if (import.meta.env.PROD) {
+    const back = document.createElement("a");
+    back.className = "brand-back";
+    back.href = "/";
+    back.textContent = "← 공간 목록";
+    $("#brand").prepend(back);
+  }
 
   const splat = new SplatMesh({
     url: tour.splatUrl,

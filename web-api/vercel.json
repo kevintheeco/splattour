@@ -1,9 +1,22 @@
 {
-  "rewrites": [
-    { "source": "/", "missing": [{ "type": "query", "key": "scene" }], "destination": "/home.html" }
-  ],
   "headers": [
-    { "source": "/scenes/:path*", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }] },
-    { "source": "/assets/:path*", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] }
+    {
+      "source": "/scenes/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
+      "source": "/assets/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
   ]
 }
