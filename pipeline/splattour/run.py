@@ -78,7 +78,9 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
         stage = "sfm"
         if not job.done(stage):
             job.start(stage)
-            info = run_panorama_sfm(images, job.dir / "sfm") if panorama else run_sfm(images, job.dir / "sfm")
+            ing = job.state["stages"]["ingest"].get("info", {})
+            ordered = ing.get("frames", 0) > ing.get("photos", 0)  # mostly video frames → capture order is spatial order
+            info = run_panorama_sfm(images, job.dir / "sfm") if panorama else run_sfm(images, job.dir / "sfm", ordered=ordered)
             job.finish(stage, **info)
         dataset = Path(job.state["stages"]["sfm"]["info"]["dataset"])
         stage = "train"

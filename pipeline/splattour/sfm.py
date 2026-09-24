@@ -30,7 +30,8 @@ def _run(args: list[str], log: Path) -> None:
         raise RuntimeError(f"command failed ({r.returncode}): {args[1] if len(args) > 1 else args[0]} — see {log}")
 
 
-def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int = 1600, use_gpu: bool = False, mapper: str = "global") -> dict:
+def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int = 1600, use_gpu: bool = False, mapper: str = "global",
+            ordered: bool = False) -> dict:
     """images: folder of jpgs. work: output workspace. Returns timing + paths.
     Result: work/dense/{images, sparse/0} undistorted, ready for training."""
     work.mkdir(parents=True, exist_ok=True)
@@ -40,9 +41,12 @@ def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int
         db.unlink()
     n = len(list(images.glob("*.jpg")))
     if matcher == "auto":
-        # video frames are ordered: sequential matching with loop detection is
-        # linear-time; small unordered photo sets can afford exhaustive.
-        matcher = "exhaustive" if n <= 150 else "sequential"
+        # Small sets: exhaustive. Larger *photo* sets are unordered (people walk
+        # around a room and come back), so neighbours in file order are not
+        # neighbours in space: match by image similarity (vocabulary tree).
+        # Sequential here broke a 259-photo house (13k points, cameras misplaced,
+        # PSNR 10.8, 2026-09-25). Video frames are ordered: sequential + loop detection.
+        matcher = "exhaustive" if n <= 150 else ("sequential" if ordered else "vocab")
     gpu = "1" if use_gpu else "0"
     t = {}
     t0 = time.time()
@@ -53,9 +57,13 @@ def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int
     t0 = time.time()
     if matcher == "exhaustive":
         _run([COLMAP, "exhaustive_matcher", "--database_path", db, "--FeatureMatching.use_gpu", gpu], log)
+    elif matcher == "vocab":
+        _run([COLMAP, "vocab_tree_matcher", "--database_path", db, "--FeatureMatching.use_gpu", gpu,
+              "--VocabTreeMatching.num_images", str(min(60, max(20, n // 5)))], log)
     else:
         _run([COLMAP, "sequential_matcher", "--database_path", db, "--FeatureMatching.use_gpu", gpu,
-              "--SequentialMatching.overlap", "15", "--SequentialMatching.quadratic_overlap", "1"], log)
+              "--SequentialMatching.overlap", "15", "--SequentialMatching.quadratic_overlap", "1",
+              "--SequentialMatching.loop_detection", "1"], log)
     t["matching"] = time.time() - t0
     t0 = time.time()
     sparse = work / "sparse"
