@@ -523,6 +523,28 @@ async function main() {
   canvas.addEventListener("dblclick", () => coach.did("close"));
   canvas.addEventListener("wheel", () => coach.did("zoom"), { passive: true });
 
+  // Zoomed all the way in and still scrolling → step toward what is under the
+  // cursor (a 3D scene can get closer, not just crop the picture).
+  let pushAcc = 0;
+  canvas.addEventListener("wheel", (e) => {
+    if (mode !== "splat" || nav.busy || e.deltaY >= 0) { pushAcc = 0; return; }
+    if (look.targetFov > look.minFov + 0.5) return;
+    pushAcc += -e.deltaY;
+    if (pushAcc < 240) return; // about two notches past the limit
+    pushAcc = 0;
+    ndc.set((e.clientX / canvas.clientWidth) * 2 - 1, -(e.clientY / canvas.clientHeight) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const o = raycaster.ray.origin.clone(), dir = raycaster.ray.direction.clone();
+    const dist = occ.march(o, dir, 12, 0.15);
+    const step = Math.min(0.8, dist - 0.55);
+    if (step < 0.12) { toast("더 가까이 갈 수 없어요"); return; }
+    const eye = o.clone().addScaledVector(dir, step);
+    const fy = floorY();
+    eye.y = THREE.MathUtils.clamp(eye.y, fy + 0.5, fy + 2.3);
+    look.zoomAt(34); // widen as we move in: the object stays about the same size, now sharper
+    nav.goToPoint(eye, { lookAt: o.clone().addScaledVector(dir, dist), duration: 0.55 });
+  }, { passive: true });
+
   // ---------- loop ----------
   const timer = new THREE.Timer();
   let frames = 0;
