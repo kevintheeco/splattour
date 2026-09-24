@@ -9,7 +9,8 @@
 import { AwsClient } from "aws4fetch";
 import crypto from "node:crypto";
 
-const E = process.env;
+// trim: values pasted into the dashboard/CLI can carry stray spaces (caused a signature mismatch once)
+const E = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v]));
 const BUCKET = E.R2_BUCKET || "hanok360";
 const ENDPOINT = `https://${E.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${BUCKET}`;
 const PART = 64 << 20; // multipart part size for large files
