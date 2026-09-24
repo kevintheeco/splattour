@@ -50,3 +50,18 @@ python -m splattour.eval_views views <scene> data/jobs/playroom/sfm/dense/sparse
 node viewer/scripts/eval-render.mjs <scene> views.json renders/<scene>
 python -m splattour.compare_sheet data/jobs/playroom/sfm/dense/images out.png A=renders/a B=renders/b
 ```
+
+## 5. 2026-09-24 밤: 웹 게시용 Dr Johnson 확정 (뷰어에서 직접 잰 값)
+
+같은 33개 시점(COLMAP 이름순 8장마다 1장)을 **실제 웹 뷰어**(SPZ 압축 + Spark)로 찍어 원본 사진과 비교했다. `data/eval/drj/`.
+
+| 모델 | 학습에 쓴 사진 | 점 개수 · 웹 파일 | 이 33장에서 PSNR / SSIM | 학습에 안 쓴 33장이 섞였나 |
+|---|---|---|---|---|
+| 이전 게시본 `drjohnson-hq` (gsplat MCMC) | 230장 (33장 제외) | 200만 · 44 MB | 28.13 / 0.883 | 아니오 (정직한 신규 시점 값) |
+| 원 논문 공개 모델 (INRIA 3DGS) | 263장 전부 | 318만 · 70 MB | 30.89 / 0.911 | 예 (학습 시점 30.68과 차이 없음 → 시험 사진을 봤음) |
+| **새 게시본 `drjohnson` (gsplat MCMC, 전체 사진)** | 263장 전부 | 200만 · 44 MB | **30.41 / 0.909** | 예 |
+
+- 원 논문 공개 모델의 30.89는 시험 사진까지 학습한 값이라 `drjohnson-hq`의 28.13과 직접 비교할 수 없다. 같은 조건(전체 사진)으로 다시 학습한 우리 모델은 0.5 dB 차이까지 따라갔고, 가장 나쁜 시점은 오히려 낫다(25.38 vs 24.31).
+- 남은 차이는 샹들리에처럼 **가는 물체**에서 보인다(`data/eval/drj/compare-full.png`). 점 개수(318만 vs 200만) 차이로 보인다. 400만 점은 웹 한도(Vercel 100MB) 때문에 싣지 못한다.
+- 게시본은 전체 사진으로 학습하고, 논문에 적을 화질 수치는 사진을 빼고 학습한 `drjohnson-hq` 값(학습 도구 29.39 dB, 뷰어 28.13 dB)을 쓴다. `python -m splattour.retrain <job> <scene> <title> 2000000 30000 0` (마지막 0 = 전체 사진).
+- 비행 중 화면(촬영하지 않은 위치) 17구간: 떠다니는 얼룩·구멍 없음(`docs/checks/drjohnson/*-flight.png`). 노트북 34 fps.
