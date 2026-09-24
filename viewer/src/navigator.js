@@ -70,7 +70,14 @@ export class Navigator extends EventTarget {
     const turn = Math.abs(wrapAngle(endYaw - startYaw));
     if (keepHeading || turn > (110 * Math.PI) / 180) endYaw = startYaw;
     // Don't arrive staring into a wall: turn toward open space if needed.
-    if (this.headingFn) endYaw = startYaw + wrapAngle(this.headingFn(points[points.length - 1], endYaw) - startYaw);
+    // If the travel direction is blocked, look where the photographer looked
+    // at that spot: the capture view is guaranteed to face real content.
+    if (this.headingFn) {
+      const end = points[points.length - 1];
+      let h = this.headingFn(end, endYaw);
+      if (targetNode && targetNode.yaw !== undefined && Math.abs(wrapAngle(h - endYaw)) > 0.3) h = this.headingFn(end, targetNode.yaw);
+      endYaw = startYaw + wrapAngle(h - startYaw);
+    }
     const endPitch = THREE.MathUtils.clamp(startPitch * 0.5 - 0.1, -0.3, 0.1);
 
     this.flight = { curve, T, t: 0, startYaw, startPitch, endYaw, endPitch, turn, targetNode, length };

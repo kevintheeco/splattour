@@ -62,3 +62,45 @@ def splat_centers(fields: dict[str, np.ndarray], min_opacity: float = 0.0):
         sc = np.zeros(len(xyz))
     keep = op >= min_opacity
     return xyz[keep], op[keep], sc[keep]
+
+
+def splat_footprints(fields: dict[str, np.ndarray], voxel: float, min_opacity: float = 0.3, sigmas: float = 1.0, max_steps: int = 6):
+    """Sample points over each splat's visible disc (its two largest axes,
+    out to `sigmas` std devs) so large, flat splats register as surfaces.
+    Optimisers cover plain walls with a few big Gaussians; counting centres
+    alone leaves those walls full of holes. Returns (points, weights)."""
+    xyz, op, _ = splat_centers(fields, min_opacity)
+    keep = (sigmoid(fields["opacity"].astype(np.float64)) >= min_opacity) if "opacity" in fields else np.ones(len(fields["x"]), bool)
+    if "scale_0" not in fields or "rot_0" not in fields:
+        return xyz, op
+    sc = np.exp(np.stack([fields[f"scale_{i}"] for i in range(3)], 1).astype(np.float64))[keep]
+    q = np.stack([fields[f"rot_{i}"] for i in range(4)], 1).astype(np.float64)[keep]
+    q /= np.linalg.norm(q, axis=1, keepdims=True) + 1e-12
+    w, x, y, z = q.T
+    R = np.stack([
+        np.stack([1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)], 1),
+        np.stack([2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)], 1),
+        np.stack([2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)], 1),
+    ], 1)  # (N,3,3), columns = local axes
+    fin = np.all(np.isfinite(sc), 1) & np.all(np.isfinite(q), 1) & np.all(np.isfinite(xyz), 1)
+    xyz, op, sc, q, R = xyz[fin], op[fin], sc[fin], q[fin], R[fin]
+    order = np.argsort(-sc, 1)
+    big = sc[np.arange(len(sc)), order[:, 0]] * sigmas > 0.75 * voxel
+    pts, wts = [xyz], [op]
+    # samples per half-axis ~ one per voxel, so memory scales with the area
+    # actually covered, not with a fixed grid per splat
+    steps = np.minimum(max_steps, np.ceil(sc[np.arange(len(sc)), order[:, 0]] * sigmas / voxel)).astype(int)
+    for k in range(1, max_steps + 1):
+        idx = np.where(big & (steps == k))[0]
+        if not len(idx):
+            continue
+        a0 = R[idx, :, order[idx, 0]] * (sc[idx, order[idx, 0]] * sigmas)[:, None]
+        a1 = R[idx, :, order[idx, 1]] * (sc[idx, order[idx, 1]] * sigmas)[:, None]
+        g = np.linspace(-1, 1, 2 * k + 1)
+        for u in g:
+            for v in g:
+                if (u == 0 and v == 0) or u * u + v * v > 1:
+                    continue
+                pts.append(xyz[idx] + u * a0 + v * a1)
+                wts.append(op[idx])
+    return np.concatenate(pts), np.concatenate(wts)

@@ -19,7 +19,7 @@ from .align import align
 from .colmap_io import find_model_dir, read_model
 from .graph import OccupancyGrid, build_graph
 from .lights import detect_lights
-from .splat_io import read_ply, splat_centers
+from .splat_io import read_ply, splat_footprints
 
 
 def build_tour(
@@ -39,17 +39,25 @@ def build_tour(
     if not (model_dir / "images.bin").exists() and not (model_dir / "images.txt").exists():
         model_dir = find_model_dir(model_dir)
     model = read_model(model_dir)
+    dropped = model.drop_outlier_cameras()
     imgs = model.images_sorted()
     al = align(model, capture_height=capture_height)
 
     centers = al.apply(np.array([im.center for im in imgs]))
     forwards = al.apply_dir(np.array([im.forward for im in imgs]))
+    # A camera below the floor is mis-registered too (nobody shoots from
+    # under the floorboards); keep it out of the tour graph.
+    under = centers[:, 1] < 0.1
+    if under.any() and not under.all():
+        dropped += [im.name for im, u in zip(imgs, under) if u]
+        imgs = [im for im, u in zip(imgs, under) if not u]
+        centers, forwards = centers[~under], forwards[~under]
 
     # Occupancy from the trained splat, mapped into the aligned world frame.
     fields = read_ply(splat_path)
-    xyz, op, _sc = splat_centers(fields, min_opacity=0.3)
     if splat_frame != "colmap":
         raise NotImplementedError("only splats in the COLMAP frame are supported")
+    xyz, op = splat_footprints(fields, voxel=0.08 / al.s, min_opacity=0.3)
     xyz_w = al.apply(xyz)
     lo = np.array([centers[:, 0].min() - 4, -0.5, centers[:, 2].min() - 4])
     hi = np.array([centers[:, 0].max() + 4, centers[:, 1].max() + 1.5, centers[:, 2].max() + 4])
@@ -88,6 +96,7 @@ def build_tour(
         "num_splats": int(len(fields["x"])),
         "alignment": {**al.info, "scale": al.s},
         "graph": g.stats,
+        "dropped_cameras": dropped,
         "lights": [{k: l[k] for k in ("name", "position", "score", "kind", "shell")} for l in lights],
         "params": {"capture_height": capture_height, "spacing": spacing, "max_edge": max_edge},
         "seconds": round(time.time() - t0, 2),

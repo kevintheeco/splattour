@@ -21,14 +21,39 @@ export class Occupancy {
     const m = splat.matrixWorld;
     const p = new THREE.Vector3();
     const inv = 1 / voxel;
-    splat.forEachSplat((_i, center, scales, _q, opacity) => {
-      if (opacity < minOpacity) return;
-      p.copy(center).applyMatrix4(m);
+    const add = (q, w) => {
+      p.copy(q).applyMatrix4(m);
       const x = Math.floor((p.x - box.min.x) * inv);
       const y = Math.floor((p.y - box.min.y) * inv);
       const z = Math.floor((p.z - box.min.z) * inv);
       if (x < 0 || y < 0 || z < 0 || x >= nx || y >= ny || z >= nz) return;
-      acc[(y * nz + z) * nx + x] += opacity;
+      acc[(y * nz + z) * nx + x] += w;
+    };
+    // Plain walls are often a few large Gaussians; counting centres alone
+    // leaves them full of holes, so big splats also stamp their disc (the two
+    // largest axes, out to 1 sigma). Voxel size in splat-local units:
+    const worldScale = new THREE.Vector3().setFromMatrixScale(m).x || 1;
+    const lv = voxel / worldScale;
+    const ax = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const s = new THREE.Vector3();
+    splat.forEachSplat((_i, center, scales, quat, opacity) => {
+      if (opacity < minOpacity) return;
+      add(center, opacity);
+      const sv = [scales.x, scales.y, scales.z];
+      const o = [0, 1, 2].sort((a, b) => sv[b] - sv[a]);
+      if (!(sv[o[0]] > 0.75 * lv)) return;
+      ax[0].set(1, 0, 0).applyQuaternion(quat).multiplyScalar(sv[0]);
+      ax[1].set(0, 1, 0).applyQuaternion(quat).multiplyScalar(sv[1]);
+      ax[2].set(0, 0, 1).applyQuaternion(quat).multiplyScalar(sv[2]);
+      const a0 = ax[o[0]], a1 = ax[o[1]];
+      const k = Math.min(6, Math.ceil(sv[o[0]] / lv));
+      for (let i = -k; i <= k; i++)
+        for (let j = -k; j <= k; j++) {
+          const u = i / k, v = j / k;
+          if ((i === 0 && j === 0) || u * u + v * v > 1) continue;
+          s.copy(center).addScaledVector(a0, u).addScaledVector(a1, v);
+          add(s, opacity);
+        }
     });
     // Threshold, then dilate by one voxel so sparse walls become watertight.
     const solid = new Uint8Array(nx * ny * nz);

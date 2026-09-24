@@ -69,6 +69,30 @@ class SparseModel:
     def images_sorted(self) -> list[Image]:
         return sorted(self.images.values(), key=lambda im: im.name)
 
+    def drop_outlier_cameras(self, k: int = 3, factor: float = 10.0, min_gap: float = 2.0, margin: float = 10.0) -> list[str]:
+        """Remove mis-registered cameras (global SfM occasionally throws a few
+        views hundreds of km away) and the sparse points far outside the
+        capture. A walkthrough is a continuous path, so a real camera always
+        has close neighbours; an isolated one is an outlier. Returns the
+        names of the dropped images."""
+        ids = list(self.images)
+        if len(ids) <= k + 1:
+            return []
+        c = np.array([self.images[i].center for i in ids])
+        d = np.linalg.norm(c[:, None] - c[None], axis=2)
+        nn = np.sort(d, 1)[:, k]
+        bad = nn > max(min_gap, factor * float(np.median(nn)))
+        dropped = [self.images[i].name for i, b in zip(ids, bad) if b]
+        for i, b in zip(ids, bad):
+            if b:
+                del self.images[i]
+        good = c[~bad]
+        if len(self.xyz):
+            lo, hi = good.min(0) - margin, good.max(0) + margin
+            keep = np.all((self.xyz >= lo) & (self.xyz <= hi), 1)
+            self.xyz, self.rgb, self.error, self.track_len = self.xyz[keep], self.rgb[keep], self.error[keep], self.track_len[keep]
+        return dropped
+
 
 def qvec_to_rotmat(q: np.ndarray) -> np.ndarray:
     w, x, y, z = q
