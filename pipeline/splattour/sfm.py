@@ -77,7 +77,8 @@ def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int
             if (s / f).exists():
                 os.replace(s / f, s / "0" / f)
     t["undistort"] = time.time() - t0
-    return {"images": n, "matcher": matcher, "mapper": mapper, "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense)}
+    dropped = clean_model(s / "0", log)
+    return {"images": n, "dropped_cameras": dropped, "matcher": matcher, "mapper": mapper, "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense)}
 
 
 def run_panorama_sfm(images: Path, work: Path, matcher: str = "sequential") -> dict:
@@ -90,6 +91,29 @@ def run_panorama_sfm(images: Path, work: Path, matcher: str = "sequential") -> d
     model = _largest_model(work / "sparse")
     return {"images": len(list(images.glob("*.jpg"))), "mode": "panorama-rig", "seconds": {"total": round(time.time() - t0, 1)},
             "dataset": str(work), "model": str(model)}
+
+
+def clean_model(model: Path, log: Path) -> list[str]:
+    """Delete mis-registered cameras from the model *before training*.
+    Global SfM occasionally throws a few views kilometres away; trainers size
+    the scene (and their learning rates) from the camera spread, so a single
+    such camera makes every Gaussian drift away and die (gsplat MCMC then
+    crashes on an empty relocation). The original model is kept in <model>_raw."""
+    from .colmap_io import read_model
+    m = read_model(model)
+    dropped = m.drop_outlier_cameras()
+    if not dropped:
+        return []
+    raw = model.parent / (model.name + "_raw")
+    if raw.exists():
+        import shutil
+        shutil.rmtree(raw)
+    model.rename(raw)
+    names = raw / "dropped.txt"
+    names.write_bytes(chr(10).join(dropped).encode("utf-8"))
+    model.mkdir()
+    _run([COLMAP, "image_deleter", "--input_path", raw, "--output_path", model, "--image_names_path", names], log)
+    return dropped
 
 
 def _largest_model(sparse: Path) -> Path:

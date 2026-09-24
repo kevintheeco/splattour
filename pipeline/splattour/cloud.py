@@ -239,7 +239,7 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         while True:
             time.sleep(30)
             try:
-                tail = ssh.run("tail -c 4000 /workspace/train.log; echo; pgrep -f simple_trainer.py >/dev/null && echo RUNNING || echo EXITED",
+                tail = ssh.run("tail -c 4000 /workspace/train.log; echo; pgrep -f '[s]imple_trainer.py' >/dev/null && echo RUNNING || echo EXITED",
                                check=False, timeout=60)
             except subprocess.TimeoutExpired:
                 continue
