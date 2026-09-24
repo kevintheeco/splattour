@@ -175,12 +175,31 @@ SETUP = r"""
 set -e
 cd /workspace
 python -m pip install -q --upgrade pip
-pip install -q gsplat --index-url https://docs.gsplat.studio/whl/pt24cu124 || pip install -q gsplat
+# Wheel cache from an earlier run (uploaded to /workspace/wheels): installs in
+# a minute instead of compiling fused-ssim & co. for 8-14 minutes.
+if ls /workspace/wheels/*.whl >/dev/null 2>&1; then
+  pip install -q --no-index --find-links /workspace/wheels gsplat || pip install -q gsplat --index-url https://docs.gsplat.studio/whl/pt24cu124
+else
+  pip install -q gsplat --index-url https://docs.gsplat.studio/whl/pt24cu124 || pip install -q gsplat
+fi
 V=$(python -c "import gsplat;print(gsplat.__version__)")
 [ -d gsplat ] || git clone -q --depth 1 --branch v$V https://github.com/nerfstudio-project/gsplat.git || git clone -q --depth 1 https://github.com/nerfstudio-project/gsplat.git
 cd gsplat/examples
 pip install -q ninja
-pip install -q --no-build-isolation -r requirements.txt
+if ls /workspace/wheels/*.whl >/dev/null 2>&1; then
+  # git+ requirements would rebuild from source even with a cache: install the
+  # cached wheels directly, then the rest of the list without the git lines
+  pip install -q --no-deps /workspace/wheels/*.whl
+  grep -vE "^git\+" requirements.txt > /tmp/req-nogit.txt
+  pip install -q --no-build-isolation -r /tmp/req-nogit.txt
+  echo WHEELS_USED
+else
+  pip install -q --no-build-isolation -r requirements.txt
+  # build a cache for next time (only the slow, compiled git packages)
+  mkdir -p /workspace/wheels_out
+  grep -E "^git\+" requirements.txt | xargs -r pip wheel -q --no-deps --no-build-isolation -w /workspace/wheels_out || true
+  pip download -q gsplat --no-deps -d /workspace/wheels_out --index-url https://docs.gsplat.studio/whl/pt24cu124 || true
+fi
 echo SETUP_DONE $V
 """
 
@@ -219,7 +238,22 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         ssh.upload_dir(dataset, ["images", "sparse"], "/workspace/data",
                        progress=lambda d, t: note({"phase": "데이터 올리는 중", "step": d, "steps": t}))
         note({"phase": "학습 도구 설치 중"})
+        cache = ROOT / "tools" / "wheels" / "pt24cu124"
+        if list(cache.glob("*.whl")):
+            ssh.upload_dir(cache.parent, [cache.name], "/workspace/_w")
+            ssh.run("mkdir -p /workspace/wheels && mv /workspace/_w/pt24cu124/*.whl /workspace/wheels/", log=log)
+        t_setup = time.time()
         setup = ssh.run(f"bash -lc {shlex.quote(SETUP)}", timeout=3600, log=log)
+        info["setup_seconds"] = round(time.time() - t_setup)
+        info["wheel_cache"] = "WHEELS_USED" in setup
+        if "WHEELS_USED" not in setup:
+            # keep the freshly built wheels for the next run
+            names = ssh.run("ls /workspace/wheels_out/*.whl 2>/dev/null", check=False).split()
+            if names:
+                cache.mkdir(parents=True, exist_ok=True)
+                for n in names:
+                    ssh.download(n, cache / Path(n).name)
+                print(f"WHEEL CACHE saved {len(names)} wheels", flush=True)
         info["gsplat"] = (re.findall(r"SETUP_DONE (\S+)", setup) or [""])[0]
         help_text = ssh.run("cd /workspace/gsplat/examples && python simple_trainer.py mcmc --help", check=False, log=log)
         f = lambda n: _flag(help_text, n)  # noqa: E731
