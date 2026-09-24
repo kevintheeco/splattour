@@ -102,6 +102,7 @@
         </select>
       </label>
       <label class="check"><input type="checkbox" id="pano" /> <span>360° 카메라로 찍었어요<small>인스타360 등으로 찍은 파노라마 영상·사진</small></span></label>
+      <div class="note" id="spend"></div>
       <button class="primary" id="go" disabled>올리고 투어 만들기</button>
     </div>
   </section>
@@ -298,6 +299,15 @@ function upload(id, title, files, received) {
 
 const fmtSec = (s) => (s > 90 ? `${Math.round(s / 60)}분` : `${Math.round(s)}초`);
 
+async function refreshSpend() {
+  try {
+    const c = await fetch("/api/cloud").then((r) => r.json());
+    $("#spend").textContent = `이번 달 클라우드 학습 $${c.spent.toFixed(2)} / 한도 $${c.budget.toFixed(0)}`;
+  } catch {}
+}
+refreshSpend();
+setInterval(refreshSpend, 60000);
+
 async function refresh() {
   const [jobs, scenes] = await Promise.all([fetch("/api/jobs").then((r) => r.json()), fetch("/api/scenes").then((r) => r.json())]);
   const J = $("#jobs");
@@ -319,7 +329,7 @@ async function refresh() {
       d.className = `stage ${v.status}`;
       d.innerHTML = `<div class="bar"></div><span></span>`;
       const pr = v.status === "running" && v.progress;
-      const extra = pr ? ` · ${pr.phase}${pr.steps ? ` ${Math.floor((100 * pr.step) / pr.steps)}%` : ""}` : "";
+      const extra = pr ? ` · ${pr.phase}${pr.steps ? ` ${Math.floor((100 * pr.step) / pr.steps)}%` : ""}${pr.why ? ` (${pr.why})` : ""}` : "";
       d.querySelector("span").textContent = v.label + (v.seconds ? ` · ${fmtSec(v.seconds)}` : "") + extra;
       S.appendChild(d);
     }

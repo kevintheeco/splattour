@@ -249,6 +249,13 @@ async def finish_upload(uid: str, spec: dict):
     return {"name": name}
 
 
+@app.get("/api/cloud")
+def cloud_status():
+    """This month's cloud training spend vs the budget (see pipeline cloud.py)."""
+    from splattour.cloud import budget, month_spend
+    return {"spent": month_spend(), "budget": budget()}
+
+
 @app.get("/api/jobs")
 def list_jobs():
     out = []
