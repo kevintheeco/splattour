@@ -30,15 +30,11 @@ with tarfile.open(fileobj=buf, mode="w:gz") as tar:
     for w in sorted((ROOT / "tools" / "wheels" / "pt24cu124").glob("*.whl")):
         tar.add(w, arcname=f"wheels/{w.name}")
 data = buf.getvalue()
-key = f"_runner/{secrets.token_hex(16)}/bundle.tgz"
+# The key stays the same across pushes (the site's RUNNER_BUNDLE setting points at it);
+# delete secrets/runner_bundle.txt to rotate it, then update RUNNER_BUNDLE on Vercel.
+ref = ROOT / "secrets" / "runner_bundle.txt"
+key = ref.read_text().strip() if ref.exists() else f"_runner/{secrets.token_hex(16)}/bundle.tgz"
 s3 = client(keys())
-s3.put_object(Bucket=BUCKET, Key=key, Body=data, ContentType="application/gzip")
-old = (ROOT / "secrets" / "runner_bundle.txt")
-prev = old.read_text().strip() if old.exists() else ""
-old.write_text(key)
-if prev and prev != key:
-    try:
-        s3.delete_object(Bucket=BUCKET, Key=prev)
-    except Exception:  # noqa: BLE001
-        pass
+s3.put_object(Bucket=BUCKET, Key=key, Body=data, ContentType="application/gzip", CacheControl="no-cache")
+ref.write_text(key)
 print(f"{key} {len(data) / 1e6:.1f} MB")
