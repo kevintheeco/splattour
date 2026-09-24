@@ -1,0 +1,30 @@
+// First-visit coaching check: look → move → close, screenshot each tip.
+//   node scripts/coach-check.mjs <scene>
+import { chromium } from "playwright-core";
+import path from "node:path";
+import fs from "node:fs";
+const scene = process.argv[2] || "drjohnson";
+const out = path.resolve("../docs/checks/coach-" + scene);
+fs.mkdirSync(out, { recursive: true });
+const b = await chromium.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true, args: ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist"] });
+const p = await b.newPage({ viewport: { width: 1280, height: 760 } });
+const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+await p.goto(`http://localhost:5190/?scene=${scene}&onboarding=1`);
+await p.waitForFunction(() => window.splattour, null, { timeout: 180000 });
+await p.waitForTimeout(1200);
+const step = () => p.evaluate(() => document.querySelector("#hint").dataset.step + (document.querySelector("#hint").classList.contains("gone") ? " (hidden)" : ""));
+const log = [];
+await p.screenshot({ path: path.join(out, "1-look.png") }); log.push(await step());
+await p.mouse.move(640, 380); await p.mouse.down(); await p.mouse.move(420, 380, { steps: 12 }); await p.mouse.up();
+await p.waitForTimeout(2000);
+await p.screenshot({ path: path.join(out, "2-move.png") }); log.push(await step());
+await p.evaluate(() => { const S = window.splattour; S.go(S.tour.neighbors(S.nav.current)[0]); });
+await p.waitForFunction(() => !window.splattour.nav.busy, null, { timeout: 15000 });
+await p.waitForTimeout(1800);
+await p.screenshot({ path: path.join(out, "3-close.png") }); log.push(await step());
+await p.mouse.dblclick(640, 330);
+await p.waitForTimeout(1500);
+log.push(await step());
+const stored = await p.evaluate(() => localStorage.getItem("splattour.coached.v1"));
+console.log(JSON.stringify({ steps: log, stored, errs }));
+await b.close();

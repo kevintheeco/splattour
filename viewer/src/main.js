@@ -9,6 +9,7 @@ import { PanoMode } from "./panomode.js";
 import { Occupancy } from "./occupancy.js";
 import { Lighting } from "./lighting.js";
 import { TourAudio } from "./audio.js";
+import { Coach } from "./coach.js";
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -514,13 +515,13 @@ async function main() {
   if (mode === "pano") await setMode("pano");
   $("#loader").classList.add("done");
 
-  let hintHidden = false;
-  function hideHint() {
-    if (hintHidden) return;
-    hintHidden = true;
-    $("#hint").classList.add("gone");
-  }
-  look.addEventListener("interact", () => setTimeout(hideHint, 900));
+  // First-visit coaching (look → move → get close), see coach.js
+  const coach = new Coach($("#hint"), params);
+  function hideHint() {} // moves report to the coach via the arrive/depart events instead
+  look.addEventListener("interact", () => { const m0 = look.yaw; setTimeout(() => { if (Math.abs(look.yaw - m0) > 0.15 || look.moved > 40) coach.did("look"); }, 700); });
+  nav.addEventListener("depart", () => coach.did("move"));
+  canvas.addEventListener("dblclick", () => coach.did("close"));
+  canvas.addEventListener("wheel", () => coach.did("zoom"), { passive: true });
 
   // ---------- loop ----------
   const timer = new THREE.Timer();

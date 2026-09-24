@@ -51,6 +51,12 @@ button { font: inherit; color: inherit; }
   animation: hint-sway 2.6s ease-in-out infinite;
 }
 .hint.gone { opacity: 0; }
+.hint .dots { display: flex; gap: 6px; margin-top: 2px; }
+.hint .dots b { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
+.hint .dots b.on { background: #fff; }
+.hint[data-step="move"] { top: 62%; animation: hint-bob 2.2s ease-in-out infinite; }
+.hint[data-step="close"] { animation: none; }
+@keyframes hint-bob { 0%, 100% { transform: translate(-50%, -50%); } 50% { transform: translate(-50%, calc(-50% + 6px)); } }
 @keyframes hint-sway { 0%, 100% { transform: translate(-50%, -50%); } 50% { transform: translate(calc(-50% + 6px), -50%); } }
 
 #tools { position: absolute; right: 16px; top: 16px; display: flex; flex-direction: column; gap: 8px; }
@@ -177,3 +183,6 @@ input[type="range"].kelvin { background: linear-gradient(90deg, #ff9a3c, #ffd9a8
   background: radial-gradient(ellipse 72% 68% at 50% 50%, transparent 55%, rgba(8, 6, 4, 0.55) 100%);
   will-change: opacity;
 }
+/* coach tips stay legible over white doors and bright windows */
+.hint span { padding: 9px 16px; border-radius: 14px; background: rgba(18, 14, 10, 0.42); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); text-shadow: none; }
+.hint svg { filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.6)); }

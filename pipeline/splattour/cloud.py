@@ -140,7 +140,7 @@ class Ssh:
         procs = []
         for g in groups:
             lst = Path(tempfile.mkstemp(suffix=".txt")[1])
-            lst.write_text("\n".join(g), encoding="utf-8")
+            lst.write_bytes("\n".join(g).encode("utf-8"))  # write_text would add \r on Windows → tar looks for "x.jpg\r"
             tar = subprocess.Popen([tar_exe, "--force-local", "--owner=0", "--group=0", "-cf", "-", "-C", str(src), "-T", str(lst)], stdout=subprocess.PIPE)
             ssh = subprocess.Popen(self.base + [f"tar --no-same-owner --no-same-permissions -xf - -C {remote_dir}"], stdin=tar.stdout,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
