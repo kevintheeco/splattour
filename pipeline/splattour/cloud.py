@@ -57,7 +57,7 @@ class RunPod:
         body = {
             "name": name,
             "imageName": IMAGE,
-            "gpuTypeIds": GPU_TYPES,
+            "gpuTypeIds": os.environ.get("SPLATTOUR_GPUS", "").split(",") if os.environ.get("SPLATTOUR_GPUS") else GPU_TYPES,
             "gpuTypePriority": "custom",
             "gpuCount": 1,
             "containerDiskInGb": disk_gb,
@@ -369,7 +369,8 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         # playroom: 20.6 dB vs 24.8 dB, error = smooth brightness field). Locked
         # exposure at capture (docs/CAPTURE_GUIDE.md) is the better fix.
         bilagrid = bilateral_grid and f("use_bilateral_grid") in help_text
-        args = ["python simple_trainer.py mcmc", f"{f('data_dir')} /workspace/data",
+        strategy = os.environ.get("SPLATTOUR_STRATEGY", "mcmc")  # "default" = gradient densification (no point cap)
+        args = [f"python simple_trainer.py {strategy}", f"{f('data_dir')} /workspace/data",
                 f"{f('data_factor')} 1", f"{f('result_dir')} /workspace/result",
                 f("no_normalize_world_space") if f("no_normalize_world_space") in help_text else f"{f('normalize_world_space')} False",
                 f("antialiased"), f"{f('strategy.cap_max')} {cap_max}", f"{f('max_steps')} {steps}",
@@ -379,7 +380,9 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
             args.append(f("use_bilateral_grid"))
         # experiment switches, e.g. SPLATTOUR_TRAIN_FLAGS="app_opt" (per-photo appearance, for
         # captures whose exposure changes shot to shot, like Zip-NeRF)
-        if "reg=" not in os.environ.get("SPLATTOUR_TRAIN_FLAGS", ""):
+        if strategy == "default":
+            args = [a for a in args if not a.startswith(f("strategy.cap_max"))]
+        elif "reg=" not in os.environ.get("SPLATTOUR_TRAIN_FLAGS", ""):
             args += mcmc_reg_flags(dataset, f)
         for flag in os.environ.get("SPLATTOUR_TRAIN_FLAGS", "").split():
             name, _, value = flag.partition("=")
