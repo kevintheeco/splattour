@@ -59,6 +59,17 @@
   .scene a.open { background: var(--accent); color: #fff; }
   .scene a.ghost { border: 1px solid var(--line); color: var(--ink); }
   .empty { color: var(--muted); font-size: 13px; padding: 18px 0; }
+  .up { padding: 18px 22px; margin-top: 14px; display: none; }
+  .up.on { display: block; }
+  .up-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13.5px; }
+  .up-head b { font-size: 15px; }
+  .up-bar { height: 8px; border-radius: 8px; background: #eee9e1; overflow: hidden; margin: 12px 0 10px; }
+  .up-bar i { display: block; height: 100%; width: 0; background: var(--warm); border-radius: 8px; transition: width .3s; }
+  .up.done .up-bar i { background: var(--ok); }
+  .up-meta { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .up button { height: 32px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--line); background: #fff; font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; }
+  .note { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+  .warn { color: var(--err); }
   .guide { padding: 22px 24px; font-size: 13.5px; line-height: 1.75; color: #3b3833; }
   .guide b { color: var(--ink); }
   @media (max-width: 760px) { .upload { grid-template-columns: 1fr; } .drop { border-right: 0; border-bottom: 1px solid var(--line); } .stages { grid-template-columns: 1fr 1fr; } }
@@ -77,21 +88,26 @@
     <div class="drop" id="drop">
       <svg viewBox="0 0 48 48"><path d="M24 31V11m0 0-8 8m8-8 8 8M9 30v5a4 4 0 0 0 4 4h22a4 4 0 0 0 4-4v-5"/></svg>
       <div class="big">촬영 파일을 여기에 끌어다 놓으세요</div>
-      <div class="small">영상(mp4·mov) 또는 사진(jpg·heic) 여러 장<br />360 카메라 영상도 됩니다</div>
+      <div class="small">폴더째 끌어 놓아도 됩니다 · 영상(mp4·mov) · 사진(jpg·heic)<br />수십 GB도 괜찮아요. 끊겨도 이어서 올라갑니다</div>
       <div class="files" id="files"></div>
-      <input type="file" id="picker" multiple hidden accept="video/*,image/*,.insv" />
+      <input type="file" id="picker" multiple hidden accept="video/*,image/*,.insv,.heic,.heif" />
     </div>
     <div class="form">
       <label class="f">공간 이름<input type="text" id="title" placeholder="예: 북촌 한옥 사랑채" /></label>
       <label class="f">품질
         <select id="quality">
-          <option value="standard">최고 품질 (30,000단계 · 이 노트북 약 1시간)</option>
-          <option value="draft">빠른 확인 (7,000단계 · 약 15분)</option>
+          <option value="cloud">논문 품질 · 클라우드 GPU (원본 해상도, 약 1시간)</option>
+          <option value="laptop">빠른 미리보기 · 이 노트북 (저해상도, 약 20분)</option>
         </select>
       </label>
       <label class="check"><input type="checkbox" id="pano" /> <span>360° 카메라로 찍었어요<small>인스타360 등으로 찍은 파노라마 영상·사진</small></span></label>
-      <button class="primary" id="go" disabled>투어 만들기</button>
+      <button class="primary" id="go" disabled>올리고 투어 만들기</button>
     </div>
+  </section>
+  <section class="card up" id="up">
+    <div class="up-head"><div><b id="upTitle"></b> <span id="upState" class="note"></span></div><button id="upPause">일시정지</button></div>
+    <div class="up-bar"><i id="upBar"></i></div>
+    <div class="up-meta"><span id="upBytes"></span><span id="upSpeed"></span></div>
   </section>
 
   <h2>처리 중인 작업</h2>
@@ -114,37 +130,168 @@ const $ = (s) => document.querySelector(s);
 let picked = [];
 let cfg = { viewer: "http://localhost:5190", stages: [] };
 fetch("/api/config").then((r) => r.json()).then((c) => (cfg = c));
+const MEDIA = /\.(mp4|mov|m4v|avi|mkv|insv|webm|jpe?g|png|heic|heif|webp|tiff?)$/i;
+const VIDEO = /\.(mp4|mov|m4v|avi|mkv|insv|webm)$/i;
+const CHUNK = 16 << 20;
+const PARALLEL = 3;
 
 const drop = $("#drop");
 drop.addEventListener("click", () => $("#picker").click());
 $("#picker").addEventListener("change", (e) => setFiles([...e.target.files]));
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); setFiles([...e.dataTransfer.files]); });
+drop.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  // Folders: walk the tree (captures usually arrive as one folder per room).
+  const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (!entries.length) return setFiles([...e.dataTransfer.files]);
+  const out = [];
+  const walk = async (en) => {
+    if (en.isFile) return out.push(await new Promise((ok, no) => en.file(ok, no)));
+    const rd = en.createReader();
+    for (;;) {
+      const batch = await new Promise((ok, no) => rd.readEntries(ok, no));
+      if (!batch.length) break;
+      for (const c of batch) await walk(c);
+    }
+  };
+  for (const en of entries) await walk(en);
+  setFiles(out);
+});
 $("#title").addEventListener("input", validate);
 
+const gb = (b) => (b >= 1 << 30 ? `${(b / 2 ** 30).toFixed(1)} GB` : `${Math.max(1, Math.round(b / 2 ** 20))} MB`);
+const dur = (s) => (s > 5400 ? `${Math.round(s / 3600)}시간` : s > 90 ? `${Math.round(s / 60)}분` : `${Math.round(s)}초`);
+
 function setFiles(fs) {
-  picked = fs;
-  const mb = fs.reduce((s, f) => s + f.size, 0) / 1048576;
-  $("#files").textContent = fs.length ? `${fs.length}개 파일 · ${mb.toFixed(0)} MB` : "";
+  const media = fs.filter((f) => MEDIA.test(f.name));
+  const skipped = fs.length - media.length;
+  picked = media.sort((a, b) => a.name.localeCompare(b.name));
+  const v = picked.filter((f) => VIDEO.test(f.name)).length;
+  const bytes = picked.reduce((s, f) => s + f.size, 0);
+  const parts = [];
+  if (picked.length - v) parts.push(`사진 ${picked.length - v}장`);
+  if (v) parts.push(`영상 ${v}개`);
+  $("#files").innerHTML = picked.length
+    ? `${parts.join(" · ")} · ${gb(bytes)}` + (skipped ? `<div class="note">촬영 파일이 아닌 ${skipped}개는 뺐어요</div>` : "")
+    : "";
   validate();
 }
-function validate() { $("#go").disabled = !(picked.length && $("#title").value.trim()); }
+function validate() { $("#go").disabled = !(picked.length && $("#title").value.trim()) || !!uploading; }
+
+let uploading = null;
+$("#upPause").addEventListener("click", () => {
+  if (!uploading) return;
+  uploading.paused = !uploading.paused;
+  $("#upPause").textContent = uploading.paused ? "이어서 올리기" : "일시정지";
+  if (!uploading.paused) uploading.kick();
+});
 
 $("#go").addEventListener("click", async () => {
-  const fd = new FormData();
-  fd.append("title", $("#title").value.trim());
-  fd.append("panorama", $("#pano").checked);
-  fd.append("quality", $("#quality").value);
-  picked.forEach((f) => fd.append("files", f));
-  $("#go").disabled = true;
-  $("#go").textContent = "올리는 중…";
-  await fetch("/api/jobs", { method: "POST", body: fd });
-  $("#go").textContent = "투어 만들기";
+  const title = $("#title").value.trim();
+  const q = $("#quality").value;
+  const files = picked;
+  const res = await fetch("/api/uploads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, panorama: $("#pano").checked, files: files.map((f) => ({ name: f.name, size: f.size, mtime: f.lastModified })) }),
+  });
+  const r = await res.json();
+  if (!res.ok) { $("#files").innerHTML = `<div class="warn">${r.detail || "시작하지 못했어요"}</div>`; return; }
+  await upload(r.id, title, files, r.received);
+  const fin = await fetch(`/api/uploads/${r.id}/finish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ backend: q === "cloud" ? "cloud" : "brush", quality: q === "cloud" ? "standard" : "draft" }),
+  });
+  $("#upState").textContent = fin.ok ? "다 올라갔어요. 아래에서 처리 과정을 볼 수 있어요" : "마무리하지 못했어요. 다시 눌러 주세요";
   setFiles([]);
   $("#title").value = "";
   refresh();
 });
+
+// Upload every file in 16 MB chunks, PARALLEL files at a time. `received`
+// comes from the server, so choosing the same files again after a reload or
+// a crash skips everything already stored.
+function upload(id, title, files, received) {
+  const total = files.reduce((s, f) => s + f.size, 0);
+  const got = received.slice();
+  const U = { paused: false, kick: () => {} };
+  uploading = U;
+  validate();
+  const box = $("#up");
+  box.className = "card up on";
+  $("#upTitle").textContent = title;
+  $("#upPause").style.display = "";
+  $("#upPause").textContent = "일시정지";
+  const resumed = got.some((x) => x > 0);
+  const samples = [];
+  let status = resumed ? "이어서 올리는 중" : "";
+  const paint = () => {
+    const done = got.reduce((s, x) => s + x, 0);
+    const now = performance.now();
+    samples.push([now, done]);
+    while (samples.length > 2 && now - samples[0][0] > 8000) samples.shift();
+    const [ta, da] = samples[0];
+    const bps = now - ta > 500 ? ((done - da) * 1000) / (now - ta) : 0;
+    $("#upBar").style.width = `${(100 * done) / total}%`;
+    $("#upBytes").textContent = `${gb(done)} / ${gb(total)} · ${Math.floor((100 * done) / total)}%`;
+    $("#upSpeed").textContent = U.paused ? "멈춤" : bps > 0 ? `${(bps / 2 ** 20).toFixed(1)} MB/s · 약 ${dur((total - done) / bps)} 남음` : "";
+    $("#upState").textContent = status;
+  };
+  const timer = setInterval(paint, 500);
+  const queue = files.map((_, i) => i).filter((i) => got[i] < files[i].size);
+  return new Promise((resolve) => {
+    let active = 0;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearInterval(timer);
+      status = "";
+      paint();
+      box.classList.add("done");
+      $("#upPause").style.display = "none";
+      uploading = null;
+      validate();
+      resolve();
+    };
+    const next = () => {
+      if (U.paused) return;
+      while (active < PARALLEL && queue.length) {
+        const i = queue.shift();
+        active++;
+        sendFile(i).then(() => { active--; next(); });
+      }
+      if (!queue.length && !active) finish();
+    };
+    U.kick = next;
+    async function sendFile(i) {
+      const f = files[i];
+      let tries = 0;
+      while (got[i] < f.size) {
+        while (U.paused) await new Promise((ok) => setTimeout(ok, 400));
+        const off = got[i];
+        try {
+          const res = await fetch(`/api/uploads/${id}/${i}?offset=${off}`, { method: "PUT", body: f.slice(off, Math.min(f.size, off + CHUNK)) });
+          const r = await res.json();
+          if (res.status === 409) { got[i] = r.detail.received; continue; }
+          if (!res.ok) throw new Error(r.detail || res.status);
+          got[i] = r.received;
+          if (tries) status = "";
+          tries = 0;
+        } catch (e) {
+          // Network hiccup: back off and retry the same offset (idempotent).
+          tries++;
+          status = `연결이 불안정해서 다시 시도하는 중 (${tries}번째)`;
+          await new Promise((ok) => setTimeout(ok, Math.min(30000, 1000 * 2 ** Math.min(tries, 5))));
+        }
+      }
+    }
+    next();
+  });
+}
 
 const fmtSec = (s) => (s > 90 ? `${Math.round(s / 60)}분` : `${Math.round(s)}초`);
 
@@ -168,7 +315,9 @@ async function refresh() {
       const d = document.createElement("div");
       d.className = `stage ${v.status}`;
       d.innerHTML = `<div class="bar"></div><span></span>`;
-      d.querySelector("span").textContent = v.label + (v.seconds ? ` · ${fmtSec(v.seconds)}` : "");
+      const pr = v.status === "running" && v.progress;
+      const extra = pr ? ` · ${pr.phase}${pr.steps ? ` ${Math.floor((100 * pr.step) / pr.steps)}%` : ""}` : "";
+      d.querySelector("span").textContent = v.label + (v.seconds ? ` · ${fmtSec(v.seconds)}` : "") + extra;
       S.appendChild(d);
     }
     if (err) {

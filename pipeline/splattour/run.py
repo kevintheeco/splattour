@@ -54,7 +54,10 @@ class Job:
 
 
 def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False, steps: int = 30000, max_resolution: int = 1024,
-            max_splats: int = 1_500_000, capture_height: float = 1.45, job_root: Path | None = None) -> Path:
+            max_splats: int = 1_500_000, capture_height: float = 1.45, job_root: Path | None = None,
+            backend: str = "brush", max_side: int | None = None) -> Path:
+    """backend: "brush" (this laptop) or "cloud" (rented CUDA GPU, gsplat,
+    full resolution; thesis quality)."""
     from .build_tour import build_tour
     from .frames import ingest
     from .sfm import run_panorama_sfm, run_sfm
@@ -69,7 +72,8 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
         stage = "ingest"
         if not job.done(stage):
             job.start(stage)
-            job.finish(stage, **ingest(inputs, images, max_side=3840 if panorama else 1600))
+            side = max_side or (3840 if panorama else 3200 if backend == "cloud" else 1600)
+            job.finish(stage, **ingest(inputs, images, max_side=side))
         stage = "sfm"
         if not job.done(stage):
             job.start(stage)
@@ -79,7 +83,15 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
         stage = "train"
         if not job.done(stage):
             job.start(stage)
-            job.finish(stage, **train_brush(dataset, job.dir / "train", steps=steps, max_resolution=max_resolution, max_splats=max_splats))
+            if backend == "cloud":
+                from .cloud import train_gsplat_cloud
+
+                def progress(d):
+                    job.state["stages"]["train"]["progress"] = d
+                    job.save()
+                job.finish(stage, **train_gsplat_cloud(dataset, job.dir / "train", steps=steps, progress=progress))
+            else:
+                job.finish(stage, **train_brush(dataset, job.dir / "train", steps=steps, max_resolution=max_resolution, max_splats=max_splats))
         ply = Path(job.state["stages"]["train"]["info"]["ply"])
         stage = "tour"
         scene_dir = ROOT / "scenes" / name

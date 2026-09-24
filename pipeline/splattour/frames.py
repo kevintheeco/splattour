@@ -16,14 +16,26 @@ import cv2
 import numpy as np
 from PIL import Image, ImageOps
 
+try:  # iPhone photos
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:  # pragma: no cover
+    pass
+
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".insv", ".webm"}
-IMAGE_EXT = {".jpg", ".jpeg", ".png", ".heic", ".webp", ".tif", ".tiff"}
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".tif", ".tiff"}
 
 
 def sharpness(path: Path, max_side: int = 640) -> float:
     img = cv2.imdecode(np.fromfile(str(path), np.uint8), cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        return 0.0
+    if img is None:  # HEIC and other formats OpenCV cannot decode
+        try:
+            im = Image.open(path)
+            im.draft("L", (max_side, max_side))
+            img = np.asarray(im.convert("L"))
+        except Exception:
+            return 0.0
     h, w = img.shape
     s = max_side / max(h, w)
     if s < 1:

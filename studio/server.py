@@ -7,6 +7,7 @@ scene at once). Progress comes from each job's status.json.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import queue
 import re
@@ -17,7 +18,7 @@ import time
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +81,117 @@ async def create_job(title: str = Form(...), panorama: bool = Form(False), quali
     if not status.exists():
         status.write_text(json.dumps({"name": name, "title": title, "queued": True, "stages": {k: {"label": v, "status": "pending"} for k, v in STAGES}},
                                      ensure_ascii=False), encoding="utf-8")
+    return {"name": name}
+
+
+# ---------------------------------------------------------------------------
+# Resumable chunked uploads. Captures for a thesis-grade scene are tens of GB
+# (4K video, 24 MP photos), so a single multipart POST is not an option: one
+# dropped Wi-Fi packet would restart everything. The browser sends 16 MB
+# chunks with an explicit offset; the server appends only at the current size,
+# so a retried chunk is idempotent and a reload continues where it stopped.
+
+MEDIA_EXT = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".insv", ".webm", ".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".tif", ".tiff"}
+
+
+def _safe(name: str) -> str:
+    return re.sub(r"[^\w.가-힣-]+", "_", Path(name).name)[-120:] or "file"
+
+
+def _manifest(uid: str) -> tuple[Path, dict]:
+    d = UPLOADS / uid
+    m = d / "_manifest.json"
+    if not m.exists():
+        raise HTTPException(404, "upload not found")
+    return d, json.loads(m.read_text(encoding="utf-8"))
+
+
+def _received(d: Path, f: dict) -> int:
+    done, part = d / f["stored"], d / (f["stored"] + ".part")
+    return done.stat().st_size if done.exists() else part.stat().st_size if part.exists() else 0
+
+
+@app.post("/api/uploads")
+async def start_upload(spec: dict):
+    files = spec.get("files") or []
+    title = (spec.get("title") or "").strip()
+    if not files or not title:
+        raise HTTPException(400, "title and files required")
+    bad = [f["name"] for f in files if Path(f["name"]).suffix.lower() not in MEDIA_EXT]
+    if bad:
+        raise HTTPException(400, f"지원하지 않는 파일: {', '.join(bad[:5])}")
+    fp = hashlib.sha1(json.dumps([[f["name"], f["size"], f.get("mtime")] for f in files]).encode()).hexdigest()[:10]
+    uid = f"{slug(title)}-{fp}"
+    d = UPLOADS / uid
+    total = sum(int(f["size"]) for f in files)
+    if not (d / "_manifest.json").exists():
+        free = shutil.disk_usage(UPLOADS.parent if UPLOADS.parent.exists() else ROOT).free
+        # originals + extracted frames + SfM/training workspace
+        if free < total * 1.6 + (5 << 30):
+            raise HTTPException(507, f"저장 공간이 부족합니다: {total / 2**30:.1f} GB를 올리려면 {total * 1.6 / 2**30 + 5:.0f} GB가 필요하고 {free / 2**30:.0f} GB 남아 있습니다")
+        d.mkdir(parents=True, exist_ok=True)
+        man = {"id": uid, "title": title, "panorama": bool(spec.get("panorama")), "created": time.time(), "total": total,
+               "files": [{"name": f["name"], "size": int(f["size"]), "stored": f"{i:05d}_{_safe(f['name'])}"} for i, f in enumerate(files)]}
+        (d / "_manifest.json").write_text(json.dumps(man, ensure_ascii=False), encoding="utf-8")
+    d, man = _manifest(uid)
+    return {"id": uid, "received": [_received(d, f) for f in man["files"]]}
+
+
+@app.put("/api/uploads/{uid}/{idx}")
+async def put_chunk(uid: str, idx: int, offset: int, request: Request):
+    d, man = _manifest(uid)
+    if not 0 <= idx < len(man["files"]):
+        raise HTTPException(404)
+    f = man["files"][idx]
+    if (d / f["stored"]).exists():
+        return {"received": f["size"]}
+    part = d / (f["stored"] + ".part")
+    cur = part.stat().st_size if part.exists() else 0
+    if offset > cur:
+        raise HTTPException(409, detail={"received": cur})
+    with open(part, "r+b" if part.exists() else "wb") as out:
+        out.truncate(offset)
+        out.seek(offset)
+        async for chunk in request.stream():
+            out.write(chunk)
+        n = out.tell()
+    if n > f["size"]:
+        part.unlink()
+        raise HTTPException(400, "file larger than announced")
+    if n == f["size"]:
+        part.rename(d / f["stored"])
+    return {"received": n}
+
+
+@app.get("/api/uploads/{uid}")
+def upload_status(uid: str):
+    d, man = _manifest(uid)
+    return {"id": uid, "received": [_received(d, f) for f in man["files"]], "total": man["total"]}
+
+
+@app.post("/api/uploads/{uid}/finish")
+async def finish_upload(uid: str, spec: dict):
+    d, man = _manifest(uid)
+    missing = [f["name"] for f in man["files"] if not (d / f["stored"]).exists()]
+    if missing:
+        raise HTTPException(409, f"아직 다 올라가지 않은 파일 {len(missing)}개")
+    name = slug(man["title"])
+    if (JOBS / name).exists() or (SCENES / name).exists():
+        name = f"{name}-{int(time.time()) % 100000}"
+    backend = spec.get("backend", "cloud")
+    steps = {"draft": 7000, "standard": 30000}.get(spec.get("quality", "standard"), 30000)
+    media = d / "media"
+    media.mkdir(exist_ok=True)
+    for f in man["files"]:
+        src = d / f["stored"]
+        if src.exists():
+            src.rename(media / f["stored"])
+    work.put(dict(inputs=[media], name=name, title=man["title"], panorama=man["panorama"], steps=steps, backend=backend))
+    (JOBS / name).mkdir(parents=True, exist_ok=True)
+    status = JOBS / name / "status.json"
+    if not status.exists():
+        status.write_text(json.dumps({"name": name, "title": man["title"], "queued": True, "backend": backend,
+                                      "stages": {k: {"label": v, "status": "pending"} for k, v in STAGES}}, ensure_ascii=False), encoding="utf-8")
     return {"name": name}
 
 

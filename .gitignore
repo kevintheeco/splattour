@@ -11,3 +11,4 @@ scratch-*.log
 __pycache__/
 scratch-*.prof
 scratch_*/
+secrets/

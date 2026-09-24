@@ -31,6 +31,8 @@ def main(argv=None):
     r.add_argument("--max-resolution", type=int, default=1024)
     r.add_argument("--max-splats", type=int, default=1_500_000)
     r.add_argument("--capture-height", type=float, default=1.45)
+    r.add_argument("--backend", default="brush", choices=["brush", "cloud"], help="cloud = rented CUDA GPU (gsplat, full resolution)")
+    r.add_argument("--max-side", type=int, default=None, help="longest image side kept at ingest")
 
     e = sub.add_parser("export", help="scenes/<name>/scene.ply → scene.sog")
     e.add_argument("--name", required=True)
@@ -42,7 +44,7 @@ def main(argv=None):
         from .run import run_job
 
         d = run_job(a.inputs, a.name, a.title or a.name, panorama=a.panorama, steps=a.steps, max_resolution=a.max_resolution,
-                    max_splats=a.max_splats, capture_height=a.capture_height)
+                    max_splats=a.max_splats, capture_height=a.capture_height, backend=a.backend, max_side=a.max_side)
         print((d / "status.json").read_text(encoding="utf-8"))
     if a.cmd == "export":
         from .run import export_web
