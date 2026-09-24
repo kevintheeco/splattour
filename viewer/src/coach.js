@@ -57,6 +57,12 @@ export class Coach {
     } else this.finish();
   }
 
+  // "?" button: show the tips again from the start
+  restart() {
+    this.on = true;
+    this._show(0);
+  }
+
   finish() {
     if (!this.on) return;
     this.on = false;

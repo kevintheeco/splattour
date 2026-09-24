@@ -447,6 +447,7 @@ async function main() {
     if (!b) return;
     const act = b.dataset.act;
     if (act === "mode") setMode(mode === "splat" ? "pano" : "splat");
+    if (act === "help") coach.restart();
     if (act === "light") {
       const m = $("#mood");
       m.hidden = !m.hidden;
