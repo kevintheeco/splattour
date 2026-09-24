@@ -109,5 +109,6 @@
     ]
   ],
   "fadeLinks": [],
-  "lights": []
+  "lights": [],
+  "splatMobile": "scene.mobile.spz"
 }
