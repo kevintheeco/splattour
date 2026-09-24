@@ -49,6 +49,8 @@ export function start({ nav, look, rig, params, canvas, getMode, tour }) {
     vignette: params.get("vignette") !== "0", onboarding: params.get("onboarding") ?? "",
   });
 
+  // the viewer jumps to the start node before this module loads: record it as the first arrival
+  if (nav.current) log("arrive", { node: nav.current.id }); // already at a viewpoint
   nav.addEventListener("depart", (e) => log("depart", { to: e.detail?.target?.id ?? null, len: +(e.detail?.length ?? 0).toFixed(2), dur: +(e.detail?.duration ?? 0).toFixed(2) }));
   nav.addEventListener("arrive", (e) => log("arrive", { node: e.detail?.node?.id ?? null }));
   canvas.addEventListener("dblclick", () => log("approach"));
