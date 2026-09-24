@@ -275,6 +275,17 @@ echo SETUP_DONE $V
 """
 
 
+def mcmc_reg_flags(dataset: Path, f) -> list[str]:
+    """gsplat MCMC's opacity/scale regularisation (0.01) is applied to every Gaussian at every
+    step, but a Gaussian only gets photometric gradient from the photos that see it. In large
+    captures each one is seen rarely and the regulariser wins: on Zip-NeRF Alameda (1734 photos)
+    73% of Gaussians died and were relocated every refine step and training collapsed (PSNR 11).
+    Scale it down with the photo count (Dr Johnson, 263 photos, keeps 0.01)."""
+    n = len([p for p in (dataset / "images").iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png")])
+    reg = round(min(0.01, 0.01 * 300 / max(n, 1)), 5)
+    return [f"{f('opacity_reg')} {reg}", f"{f('scale_reg')} {reg}"]
+
+
 def _flag(help_text: str, name: str) -> str:
     """tyro spells flags with hyphens in new versions, underscores in old."""
     hy = "--" + name.replace("_", "-")
@@ -368,6 +379,8 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
             args.append(f("use_bilateral_grid"))
         # experiment switches, e.g. SPLATTOUR_TRAIN_FLAGS="app_opt" (per-photo appearance, for
         # captures whose exposure changes shot to shot, like Zip-NeRF)
+        if "reg=" not in os.environ.get("SPLATTOUR_TRAIN_FLAGS", ""):
+            args += mcmc_reg_flags(dataset, f)
         for flag in os.environ.get("SPLATTOUR_TRAIN_FLAGS", "").split():
             name, _, value = flag.partition("=")
             args.append(f"{f(name)} {value}" if value else f(name))
@@ -441,6 +454,8 @@ def train_gsplat_local(dataset: Path, out: Path, steps: int = 30000, cap_max: in
             *([] if f("no_normalize_world_space") in help_text else ["False"]),
             f("antialiased"), f("strategy.cap_max"), str(cap_max), f("max_steps"), str(steps), f("eval_steps"), str(steps),
             f("save_steps"), str(steps), f("save_ply"), f("ply_steps"), str(steps), f("test_every"), str(test_every or 10**9), f("disable_viewer")]
+    for a in mcmc_reg_flags(dataset, f):
+        args += a.split(" ", 1)
     note({"phase": "학습 중", "step": 0, "steps": steps})
     last, t1 = 0, time.time()
     with open(out / "train.log", "w", encoding="utf-8") as logf:
