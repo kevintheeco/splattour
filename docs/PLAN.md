@@ -89,7 +89,7 @@
 | M6 | 360 카메라 입력(rig), gsplat 고품질 학습 스크립트 | 같은 공간 품질 비교표 | 🟡 RunPod gsplat 자동 학습 완주(15분, $0.35), 360 입력은 코드만 |
 | M7 | 평가 도구: 화질 지표, 사용자 실험용 파노라마 비교 모드 | 논문 표·그림 바로 뽑힘 | 🟡 정확한 시험 시점 렌더 + PSNR/SSIM + 비교 이미지, 파노라마 모드 |
 
-인터랙션 설계와 실험 설정: `docs/INTERACTION.md` · 촬영 방법: `docs/CAPTURE_GUIDE.md`
+인터랙션 설계와 실험 설정: `docs/INTERACTION.md` · 촬영 방법: `docs/CAPTURE_GUIDE.md` · 화질 비교: `docs/QUALITY.md`
 
 ## 6-1. 추가 요구 (2026-09-24 대표 지시): 인터랙티브 조명 · 음악 · 한옥
 
