@@ -14,7 +14,7 @@ from .cloud import train_gsplat_cloud
 from .run import ROOT, export_web
 
 
-def main(job: str, scene: str, title: str, cap_max: str = "4000000") -> None:
+def main(job: str, scene: str, title: str, cap_max: str = "2000000") -> None:
     jdir = ROOT / "data" / "jobs" / job
     st = json.loads((jdir / "status.json").read_text(encoding="utf-8"))
     dataset = Path(st["stages"]["sfm"]["info"]["dataset"])

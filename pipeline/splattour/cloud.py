@@ -210,7 +210,7 @@ def _flag(help_text: str, name: str) -> str:
     return hy if hy in help_text else "--" + name
 
 
-def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: int = 4_000_000, max_hours: float = 4.0,
+def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: int = 2_000_000, max_hours: float = 4.0,
                        bilateral_grid: bool = False,
                        community: bool = False, progress: Callable[[dict], None] | None = None) -> dict:
     """dataset: folder with images/ and sparse/0/ (undistorted PINHOLE)."""
@@ -272,7 +272,7 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
             args.append(f("use_bilateral_grid"))
         cmd = " ".join(args)
         info["command"] = cmd
-        ssh.run(f"cd /workspace/gsplat/examples && nohup {cmd} > /workspace/train.log 2>&1 & echo started", log=log)
+        ssh.run(f"cd /workspace/gsplat/examples && setsid nohup {cmd} > /workspace/train.log 2>&1 < /dev/null & echo started", log=log)
         note({"phase": "학습 중", "step": 0, "steps": steps})
         last = 0
         while True:
