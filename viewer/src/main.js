@@ -15,7 +15,9 @@ import { Photos } from "./photos.js";
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
 const sceneName = params.get("scene") || import.meta.env.VITE_DEFAULT_SCENE || "demo"; // web deploy sets its showcase scene
-const baseUrl = new URL(`/scenes/${encodeURIComponent(sceneName)}/`, location.href);
+// ?from=cloud: scenes published to cloud storage (see home.js); otherwise bundled / local ones
+const cloudBase = params.get("from") === "cloud" && import.meta.env.VITE_STORAGE_URL;
+const baseUrl = new URL(`${cloudBase || ""}/scenes/${encodeURIComponent(sceneName)}/`, location.href);
 
 // ---------- renderer / scene ----------
 const canvas = $("#view");

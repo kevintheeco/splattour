@@ -55,9 +55,10 @@ class Job:
 
 def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False, steps: int = 30000, max_resolution: int = 1024,
             max_splats: int = 1_500_000, capture_height: float = 1.45, job_root: Path | None = None,
-            backend: str = "brush", max_side: int | None = None) -> Path:
+            backend: str = "brush", max_side: int | None = None, test_every: int = 8) -> Path:
     """backend: "brush" (this laptop) or "cloud" (rented CUDA GPU, gsplat,
-    full resolution; thesis quality)."""
+    full resolution; thesis quality). test_every=0 trains the cloud model on
+    every photo (best for showing; no held-out score), 8 keeps a test split."""
     from .build_tour import build_tour
     from .frames import ingest
     from .sfm import run_panorama_sfm, run_sfm
@@ -89,7 +90,8 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
                 def progress(d):
                     job.state["stages"]["train"]["progress"] = d
                     job.save()
-                job.finish(stage, **train_gsplat_cloud(dataset, job.dir / "train", steps=steps, progress=progress))
+                job.finish(stage, **train_gsplat_cloud(dataset, job.dir / "train", steps=steps, progress=progress,
+                                                           test_every=test_every or 10**9))
             else:
                 job.finish(stage, **train_brush(dataset, job.dir / "train", steps=steps, max_resolution=max_resolution, max_splats=max_splats))
         ply = Path(job.state["stages"]["train"]["info"]["ply"])
@@ -103,6 +105,13 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
         if not job.done(stage):
             job.start(stage)
             job.finish(stage, **export_web(scene_dir))
+        # Source photos for the viewer's "원본 사진" (a failure here must not fail the tour)
+        try:
+            from .photos import export_photos
+            model = dataset / "sparse" / "0" if (dataset / "sparse" / "0").exists() else Path(job.state["stages"]["sfm"]["info"]["model"])
+            job.state["photos"] = export_photos(name, model, dataset / "images")
+        except Exception as e:  # noqa: BLE001
+            job.state["photos_error"] = str(e)
         job.state["current"] = None
         job.state["scene"] = name
         job.save()

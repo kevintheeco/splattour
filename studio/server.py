@@ -246,26 +246,42 @@ async def finish_upload(uid: str, spec: dict):
     missing = [f["name"] for f in man["files"] if not (d / f["stored"]).exists()]
     if missing:
         raise HTTPException(409, f"아직 다 올라가지 않은 파일 {len(missing)}개")
-    name = slug(man["title"])
-    if (JOBS / name).exists() or (SCENES / name).exists():
-        name = f"{name}-{int(time.time()) % 100000}"
-    backend = spec.get("backend", "cloud")
-    quality = spec.get("quality", "standard")
-    # cloud draft: 15k steps ≈ 8 min, $0.12, −0.2 dB vs 30k (docs/QUALITY.md)
-    steps = {"draft": 15000 if backend == "cloud" else 7000, "standard": 30000}.get(quality, 30000)
     media = d / "media"
     media.mkdir(exist_ok=True)
     for f in man["files"]:
         src = d / f["stored"]
         if src.exists():
             src.rename(media / f["stored"])
-    work.put(dict(inputs=[media], name=name, title=man["title"], panorama=man["panorama"], steps=steps, backend=backend))
+    return {"name": enqueue(media, man["title"], man["panorama"], spec.get("backend", "cloud"), spec.get("quality", "standard"))}
+
+
+def enqueue(media: Path, title: str, panorama: bool, backend: str = "cloud", quality: str = "standard", test_every: int = 8) -> str:
+    """Queue a processing job for a folder of captures; returns the job/scene name."""
+    name = slug(title)
+    if (JOBS / name).exists() or (SCENES / name).exists():
+        name = f"{name}-{int(time.time()) % 100000}"
+    # cloud draft: 15k steps ≈ 8 min, $0.12, −0.2 dB vs 30k (docs/QUALITY.md)
+    steps = {"draft": 15000 if backend == "cloud" else 7000, "standard": 30000}.get(quality, 30000)
+    work.put(dict(inputs=[media], name=name, title=title, panorama=panorama, steps=steps, backend=backend, test_every=test_every))
     (JOBS / name).mkdir(parents=True, exist_ok=True)
     status = JOBS / name / "status.json"
     if not status.exists():
-        status.write_text(json.dumps({"name": name, "title": man["title"], "queued": True, "backend": backend,
+        status.write_text(json.dumps({"name": name, "title": title, "queued": True, "backend": backend,
                                       "stages": {k: {"label": v, "status": "pending"} for k, v in STAGES}}, ensure_ascii=False), encoding="utf-8")
-    return {"name": name}
+    return name
+
+
+# Uploads from the public site arrive through cloud storage (pipeline inbox.py).
+# Shown tours train on every photo (+2 dB on Dr Johnson, docs/QUALITY.md §5).
+from splattour.inbox import Bridge  # noqa: E402
+
+bridge = Bridge(lambda media, title, pano, quality: enqueue(media, title, pano, "cloud", quality, test_every=0))
+bridge.start()
+
+
+@app.get("/api/bridge")
+def bridge_status():
+    return {"connected": bool(__import__("splattour.inbox", fromlist=["keys"]).keys()), "error": bridge.error, "web": bridge.state["web"]}
 
 
 STUDY = ROOT / "data" / "study"
