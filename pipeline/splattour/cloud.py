@@ -94,6 +94,62 @@ class RunPod:
         raise TimeoutError("GPU 서버가 15분 안에 준비되지 않았습니다")
 
 
+# ---------------------------------------------------------------------------
+# Spending guard. Every run is appended to secrets/cloud_ledger.jsonl; a new
+# pod is refused once this month's total reaches the budget in
+# secrets/cloud_budget.txt (US$, default 30). Stale "splattour-*" pods left by
+# a crashed laptop are deleted before renting a new one.
+LEDGER = SECRETS / "cloud_ledger.jsonl"
+
+
+def month_spend(now: float | None = None) -> float:
+    ym = time.strftime("%Y-%m", time.localtime(now or time.time()))
+    total = 0.0
+    if LEDGER.exists():
+        for line in LEDGER.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if time.strftime("%Y-%m", time.localtime(r.get("at", 0))) == ym:
+                total += float(r.get("cost_usd") or 0)
+    return round(total, 2)
+
+
+def budget() -> float:
+    p = SECRETS / "cloud_budget.txt"
+    try:
+        return float(p.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return 30.0
+
+
+def record_spend(info: dict) -> None:
+    LEDGER.parent.mkdir(parents=True, exist_ok=True)
+    rec = {"at": time.time(), "pod": info.get("pod"), "cost_usd": info.get("cost_usd", 0), "seconds": info.get("seconds"),
+           "steps": info.get("steps"), "psnr": info.get("eval_psnr")}
+    with open(LEDGER, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
+def reap_stale_pods(rp: "RunPod", older_than_h: float = 4.5) -> list[str]:
+    gone = []
+    for p in rp.list_pods():
+        name = p.get("name") or ""
+        if not name.startswith("splattour-") or p.get("desiredStatus") != "RUNNING":
+            continue
+        started = p.get("lastStartedAt") or p.get("createdAt") or ""
+        try:
+            from datetime import datetime
+            age_h = (time.time() - datetime.fromisoformat(started.replace("Z", "+00:00")).timestamp()) / 3600
+        except ValueError:
+            continue
+        if age_h > older_than_h:
+            rp.delete(p["id"])
+            gone.append(p["id"])
+    return gone
+
+
 class Ssh:
     def __init__(self, host: str, port: int, key: Path):
         self.base = [shutil.which("ssh") or "ssh", "-i", str(key), "-p", str(port),
@@ -234,6 +290,12 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
     key = SECRETS / "splattour_ed25519"
     pub = (SECRETS / "splattour_ed25519.pub").read_text().strip()
     rp = RunPod()
+    spent, cap = month_spend(), budget()
+    if spent >= cap:
+        raise RuntimeError(f"이번 달 클라우드 학습 비용 ${spent}가 한도 ${cap}에 도달했습니다. secrets/cloud_budget.txt 에서 한도를 바꿀 수 있어요.")
+    stale = reap_stale_pods(rp, older_than_h=max_hours + 0.5)
+    if stale:
+        log.write(f"\n[deleted stale pods {stale}]\n")
     t0 = time.time()
     pod = rp.create_pod(f"splattour-{out.parent.name}"[:40], pub, community=community)
     pod_id = pod["id"]
@@ -344,4 +406,8 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         if info.get("cost_per_hr"):
             info["cost_usd"] = round(float(info["cost_per_hr"]) * info["seconds"] / 3600, 2)
         log.write(f"\n[pod {pod_id} deleted after {info['seconds']}s]\n")
+        try:
+            record_spend(info)
+        except OSError:
+            pass
         log.close()
