@@ -56,8 +56,8 @@ vec3 stLight(vec3 p, vec3 n, vec3 sc, vec3 c) {
   // per-splat shading never exposes the splat structure (painterly streaks).
   float smin = min(sc.x, min(sc.y, sc.z));
   float smid = sc.x + sc.y + sc.z - smin - max(sc.x, max(sc.y, sc.z));
-  float flat = clamp(1.0 - smin / max(smid, 1e-6), 0.0, 1.0);
-  float nTrust = flat * flat * flat * 0.8;
+  float flatness = clamp(1.0 - smin / max(smid, 1e-6), 0.0, 1.0);
+  float nTrust = flatness * flatness * flatness * 0.8;
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
   vec3 carried = vec3(0.0);   // light kept alive by lamps that are on
   float removed = 0.0;        // light taken away by captured lamps now off
