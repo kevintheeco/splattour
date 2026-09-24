@@ -17,7 +17,10 @@ export class Tour {
     this.title = data.title || "Untitled";
     this.subtitle = data.subtitle || "";
     this.eyeHeight = data.eyeHeight ?? 1.55;
-    this.splatUrl = this.resolve(data.splat);
+    // Phones get the lighter SH-1 variant when there is one (?quality=full|mobile overrides).
+    const q = new URLSearchParams(location.search).get("quality");
+    const phone = q ? q === "mobile" : matchMedia("(pointer: coarse)").matches;
+    this.splatUrl = this.resolve(phone && data.splatMobile ? data.splatMobile : data.splat);
     this.splatTransform = data.splatTransform || null;
 
     this.nodes = data.nodes.map((n, i) => ({

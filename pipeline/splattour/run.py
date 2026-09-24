@@ -124,6 +124,9 @@ def export_web(scene_dir: Path, floaters: bool = False, fmt: str = "spz") -> dic
         # splat-transform writes v4.
         from .spz import ply_to_spz
         ply_to_spz(src, dst)
+        # Phone variant: view-dependent colour cut to SH degree 1 (−30 % size,
+        # −0.28 dB on playroom). The viewer picks it on touch devices.
+        ply_to_spz(src, scene_dir / "scene.mobile.spz", max_sh=1)
     else:
         args = [str(SPLAT_TRANSFORM), "-w", str(src), "-N"]
         if floaters:
@@ -135,5 +138,8 @@ def export_web(scene_dir: Path, floaters: bool = False, fmt: str = "spz") -> dic
     tour_p = scene_dir / "tour.json"
     tour = json.loads(tour_p.read_text(encoding="utf-8"))
     tour["splat"] = dst.name
+    if (scene_dir / "scene.mobile.spz").exists() and fmt == "spz":
+        tour["splatMobile"] = "scene.mobile.spz"
     tour_p.write_text(json.dumps(tour, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"web_mb": round(dst.stat().st_size / 1e6, 1), "format": fmt, "ply_mb": round(src.stat().st_size / 1e6, 1), "seconds": round(time.time() - t0, 1)}
+    mob = scene_dir / "scene.mobile.spz"
+    return {"web_mb": round(dst.stat().st_size / 1e6, 1), "mobile_mb": round(mob.stat().st_size / 1e6, 1) if mob.exists() else None, "format": fmt, "ply_mb": round(src.stat().st_size / 1e6, 1), "seconds": round(time.time() - t0, 1)}
