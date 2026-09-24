@@ -122,8 +122,8 @@ class Ssh:
     def upload_dir(self, src: Path, names: list[str], remote_dir: str) -> None:
         """tar-stream folders (fast for thousands of files, resumes nothing
         but needs no extra tools on either side)."""
-        tar = subprocess.Popen([shutil.which("tar") or "tar", "-cf", "-", "-C", str(src), *names], stdout=subprocess.PIPE)
-        r = subprocess.run(self.base + [f"mkdir -p {remote_dir} && tar -xf - -C {remote_dir}"], stdin=tar.stdout, capture_output=True)
+        tar = subprocess.Popen([shutil.which("tar") or "tar", "--force-local", "--owner=0", "--group=0", "-cf", "-", "-C", str(src), *names], stdout=subprocess.PIPE)
+        r = subprocess.run(self.base + [f"mkdir -p {remote_dir} && tar --no-same-owner --no-same-permissions -xf - -C {remote_dir}"], stdin=tar.stdout, capture_output=True)
         tar.stdout.close()
         tar.wait()
         if r.returncode != 0 or tar.returncode != 0:

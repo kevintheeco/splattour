@@ -12,7 +12,9 @@ export class LookControls extends EventTarget {
     this.yaw = 0; // radians, 0 = looking toward -Z
     this.pitch = 0;
     this.fov = 70;
-    this.minFov = 30;
+    this.targetFov = 70; // zoom eases toward this (no stepping on each wheel notch)
+    this.zoomAnchor = null; // screen point (NDC) that stays under the cursor while zooming
+    this.minFov = 20;
     this.maxFov = 95;
     this.fovKick = 0; // added by the navigator while flying
     this.velYaw = 0;
@@ -52,7 +54,7 @@ export class LookControls extends EventTarget {
         this.dispatchEvent(new Event("interact"));
       } else if (this.pointers.size === 2) {
         this.pinchStart = this._pinchDist();
-        this.pinchFov = this.fov;
+        this.pinchFov = this.targetFov;
       }
     });
     el.addEventListener("pointermove", (e) => {
@@ -64,7 +66,8 @@ export class LookControls extends EventTarget {
       p.y = e.clientY;
       if (this.pointers.size === 2) {
         const d = this._pinchDist();
-        if (this.pinchStart > 0) this.setFov(this.pinchFov * (this.pinchStart / d));
+        const [a, b] = [...this.pointers.values()];
+        if (this.pinchStart > 0) this.zoomAt(this.pinchFov * (this.pinchStart / d), (a.x + b.x) / 2, (a.y + b.y) / 2);
         return;
       }
       this.moved += Math.abs(dx) + Math.abs(dy);
@@ -86,7 +89,8 @@ export class LookControls extends EventTarget {
       (e) => {
         if (!this.enabled) return;
         e.preventDefault();
-        this.setFov(this.fov * Math.exp(e.deltaY * 0.0012));
+        // Trackpads send many small deltas, mouse wheels a few large ones; both feel the same.
+        this.zoomAt(this.targetFov * Math.exp(THREE.MathUtils.clamp(e.deltaY, -120, 120) * 0.0016), e.clientX, e.clientY);
       },
       { passive: false },
     );
@@ -103,8 +107,30 @@ export class LookControls extends EventTarget {
     return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
+  // Set the zoom immediately (tour jumps, resets).
   setFov(f) {
-    this.fov = THREE.MathUtils.clamp(f, this.minFov, this.maxFov);
+    this.fov = this.targetFov = THREE.MathUtils.clamp(f, this.minFov, this.maxFov);
+    this.zoomAnchor = null;
+  }
+
+  // Zoom toward a screen point, the way maps do: what is under the cursor
+  // stays under the cursor while the view narrows onto it.
+  zoomAt(f, clientX, clientY) {
+    this.targetFov = THREE.MathUtils.clamp(f, this.minFov, this.maxFov);
+    const r = this.dom.getBoundingClientRect();
+    this.zoomAnchor = clientX === undefined ? null : {
+      x: ((clientX - r.left) / r.width) * 2 - 1,
+      y: -(((clientY - r.top) / r.height) * 2 - 1),
+      aspect: r.width / r.height,
+    };
+    // the world direction under the cursor right now; zooming keeps it there
+    if (this.zoomAnchor) this.zoomAnchor.world = this._dirAt(this.zoomAnchor, this.yaw, this.pitch, this.fov);
+  }
+
+  _dirAt(a, yaw, pitch, fov) {
+    const t = Math.tan((fov * DEG) / 2);
+    this._euler.set(pitch, yaw, 0, "YXZ");
+    return new THREE.Vector3(a.x * t * a.aspect, a.y * t, -1).normalize().applyEuler(this._euler);
   }
 
   update(dt) {
@@ -124,8 +150,26 @@ export class LookControls extends EventTarget {
       if (this.keys.has("ArrowRight") || this.keys.has("d")) this.yaw -= s;
       if (this.keys.has("PageUp")) this.pitch = Math.min(this.pitch + s, 85 * DEG);
       if (this.keys.has("PageDown")) this.pitch = Math.max(this.pitch - s, -85 * DEG);
-      if (this.keys.has("+") || this.keys.has("=")) this.setFov(this.fov * Math.exp(-dt));
-      if (this.keys.has("-")) this.setFov(this.fov * Math.exp(dt));
+      if (this.keys.has("+") || this.keys.has("=")) this.zoomAt(this.targetFov * Math.exp(-dt));
+      if (this.keys.has("-")) this.zoomAt(this.targetFov * Math.exp(dt));
+    }
+    // Ease the zoom (critically damped feel, framerate independent) and keep
+    // the anchor point fixed on screen by turning the view as it narrows.
+    if (Math.abs(this.targetFov - this.fov) > 1e-3) {
+      const f0 = this.fov;
+      const f1 = f0 + (this.targetFov - f0) * (1 - Math.exp(-dt * 14));
+      if (this.zoomAnchor && !this.dragging) {
+        // Solve yaw/pitch so the remembered world direction sits exactly
+        // under the anchor pixel at the new fov (converges in a few steps).
+        const W = this.zoomAnchor.world;
+        const azW = Math.atan2(-W.x, -W.z), elW = Math.asin(THREE.MathUtils.clamp(W.y, -1, 1));
+        for (let i = 0; i < 4; i++) {
+          const d = this._dirAt(this.zoomAnchor, this.yaw, this.pitch, f1);
+          this.yaw += wrapAngle(azW - Math.atan2(-d.x, -d.z));
+          this.pitch = THREE.MathUtils.clamp(this.pitch + elW - Math.asin(THREE.MathUtils.clamp(d.y, -1, 1)), -85 * DEG, 85 * DEG);
+        }
+      }
+      this.fov = f1;
     }
     if (this.autoRotate && !this.dragging) this.yaw += 0.06 * dt;
 

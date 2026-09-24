@@ -368,14 +368,43 @@ async function main() {
     }
     const t = resolveTarget();
     if (!t) return;
-    if (t.node) go(t.node);
-    else if (t.none) toast("이 방향에는 이동할 시점이 없어요");
-    else {
-      hideHint();
-      nav.goToPoint(new THREE.Vector3(t.point.x, t.point.y + tour.eyeHeight, t.point.z));
-    }
+    // Wait a moment: a second click turns this into "다가가 보기" instead of a move.
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      if (t.node) go(t.node);
+      else if (t.none) toast("이 방향에는 이동할 시점이 없어요");
+      else {
+        hideHint();
+        nav.goToPoint(new THREE.Vector3(t.point.x, t.point.y + tour.eyeHeight, t.point.z));
+      }
+    }, 230);
   });
-  canvas.addEventListener("dblclick", (e) => e.preventDefault());
+  let clickTimer = 0;
+
+  // Double-click an object → fly up to it and look at it ("다가가 보기").
+  // The surface is found with the occupancy grid (microseconds, no splat raycast).
+  canvas.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    clearTimeout(clickTimer);
+    if (mode !== "splat") return;
+    ndc.set((e.clientX / canvas.clientWidth) * 2 - 1, -(e.clientY / canvas.clientHeight) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const o = raycaster.ray.origin.clone(), dir = raycaster.ray.direction.clone();
+    const dist = occ.march(o, dir, 12, 0.15);
+    if (dist >= 12) { toast("너무 멀어서 다가갈 수 없어요"); return; }
+    const surface = o.clone().addScaledVector(dir, dist);
+    const standoff = THREE.MathUtils.clamp(dist * 0.35, 0.7, 1.1);
+    const go2 = Math.max(0, dist - standoff);
+    if (go2 < 0.35) { look.zoomAt(look.targetFov * 0.6, e.clientX, e.clientY); return; } // already close: just zoom
+    const eye = o.clone().addScaledVector(dir, go2);
+    const fy = floorY();
+    eye.y = THREE.MathUtils.clamp(eye.y, fy + 0.6, fy + 2.2);
+    if (!occ.clear(o, eye, 0.2)) { look.zoomAt(look.targetFov * 0.6, e.clientX, e.clientY); return; }
+    hideHint();
+    look.zoomAt(62);
+    nav.goToPoint(eye, { lookAt: surface, duration: THREE.MathUtils.clamp(0.8 + go2 * 0.35, 0.9, 2.2) });
+    toast("가까이 다가갔어요 · 바닥이나 시점을 누르면 다시 이동해요");
+  });
 
   function updateHover(now) {
     if (!pendingHover || nav.busy || look.dragging || now - lastHover < 50) return;

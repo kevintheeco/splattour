@@ -47,7 +47,7 @@ export class Navigator extends EventTarget {
     return this._fly([this.rig.position.clone(), point.clone()], null, opts);
   }
 
-  _fly(points, targetNode, { duration, keepHeading = false } = {}) {
+  _fly(points, targetNode, { duration, keepHeading = false, lookAt = null } = {}) {
     const length = points.reduce((s, p, i) => (i ? s + p.distanceTo(points[i - 1]) : 0), 0);
     if (length < 0.05) {
       if (targetNode) this._arrive(targetNode);
@@ -72,13 +72,19 @@ export class Navigator extends EventTarget {
     // Don't arrive staring into a wall: turn toward open space if needed.
     // If the travel direction is blocked, look where the photographer looked
     // at that spot: the capture view is guaranteed to face real content.
-    if (this.headingFn) {
+    if (this.headingFn && !keepHeading && !lookAt) {
       const end = points[points.length - 1];
       let h = this.headingFn(end, endYaw);
       if (targetNode && targetNode.yaw !== undefined && Math.abs(wrapAngle(h - endYaw)) > 0.3) h = this.headingFn(end, targetNode.yaw);
       endYaw = startYaw + wrapAngle(h - startYaw);
     }
-    const endPitch = THREE.MathUtils.clamp(startPitch * 0.5 - 0.1, -0.3, 0.1);
+    let endPitch = THREE.MathUtils.clamp(startPitch * 0.5 - 0.1, -0.3, 0.1);
+    // "다가가 보기": arrive facing the object that was double-clicked.
+    if (lookAt) {
+      const d = new THREE.Vector3().subVectors(lookAt, points[points.length - 1]);
+      endYaw = startYaw + wrapAngle(yawOf(d) - startYaw);
+      endPitch = THREE.MathUtils.clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -1.2, 1.2);
+    }
 
     this.flight = { curve, T, t: 0, startYaw, startPitch, endYaw, endPitch, turn, targetNode, length };
     this.look.velYaw = this.look.velPitch = 0;
