@@ -1,6 +1,6 @@
 {
-  "model_dir": "C:\\Users\\kevin\\Desktop\\주희\\data\\samples\\deepblending_drjohnson\\colmap\\sparse\\0",
-  "splat": "C:\\Users\\kevin\\Desktop\\주희\\data\\jobs\\drjohnson-hq\\train\\splat.ply",
+  "model_dir": "..\\data\\samples\\deepblending_drjohnson\\colmap\\sparse\\0",
+  "splat": "..\\data\\jobs\\drjohnson-hq\\train\\splat.ply",
   "num_images": 263,
   "num_points3d": 80777,
   "num_splats": 2000000,
@@ -33,6 +33,17 @@
       "score": 106,
       "kind": "ceiling",
       "shell": 0.117
+    },
+    {
+      "name": "천장등 2",
+      "position": [
+        4.174,
+        2.259,
+        -3.836
+      ],
+      "score": 34,
+      "kind": "ceiling",
+      "shell": 0.123
     }
   ],
   "params": {
@@ -40,5 +51,5 @@
     "spacing": 1.3,
     "max_edge": 4.0
   },
-  "seconds": 1.51
+  "seconds": 1.38
 }

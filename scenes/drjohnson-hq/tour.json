@@ -385,7 +385,7 @@
         2.071,
         -0.42
       ],
-      "radius": 3.29,
+      "radius": 3.59,
       "emitter": 0.28,
       "kelvin": 3067,
       "score": 106,
@@ -393,6 +393,22 @@
       "kind": "ceiling",
       "id": "light0",
       "name": "천장등 1",
+      "capturedOn": true
+    },
+    {
+      "position": [
+        4.174,
+        2.259,
+        -3.836
+      ],
+      "radius": 2.97,
+      "emitter": 0.2,
+      "kelvin": 2995,
+      "score": 34,
+      "shell": 0.123,
+      "kind": "ceiling",
+      "id": "light1",
+      "name": "천장등 2",
       "capturedOn": true
     }
   ],

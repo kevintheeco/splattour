@@ -28,7 +28,12 @@ def _shell_occupancy(occ, c: np.ndarray, radii=(0.35, 0.5, 0.7), n_dirs: int = 1
 
 
 def detect_lights(fields: dict, to_world, floor_y: float = 0.0, max_lights: int = 12, voxel: float = 0.12,
-                  lum_thresh: float = 0.92, min_splats: int = 60, occ=None, max_shell: float = 0.22) -> list[dict]:
+                  lum_thresh: float = 0.92, min_splats: int | None = None, occ=None, max_shell: float = 0.22) -> list[dict]:
+    if min_splats is None:
+        # a lamp is drawn with fewer Gaussians in a sparser model: 15 per million
+        # (3.2M → 48, 2M → 30). Tuned on Dr Johnson against the 3 known chandeliers
+        # (data/_lightsweep.py): both models 2/3 found, 0 false positives.
+        min_splats = int(np.clip(round(15e-6 * len(fields["x"])), 20, 80))
     dc = np.stack([fields[f"f_dc_{i}"] for i in range(3)], 1)
     rgb = np.clip(dc * C0 + 0.5, 0, 1.5)
     op = 1 / (1 + np.exp(-fields["opacity"]))
