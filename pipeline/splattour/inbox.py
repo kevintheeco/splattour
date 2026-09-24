@@ -28,7 +28,7 @@ from .eval_views import ROOT
 
 SECRETS = ROOT / "secrets" / "r2.txt"
 STATE = ROOT / "data" / "inbox_state.json"
-BUCKET = "splattour"
+BUCKET = "hanok360"
 
 
 def keys() -> dict | None:
