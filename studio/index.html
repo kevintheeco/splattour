@@ -126,8 +126,10 @@
     <b>4. 문지방은 앞뒤로 두 번.</b> 방과 방이 이어지는 곳이 투어 동선의 핵심이에요.<br />
     <b>5. 움직이는 것·거울 치우기.</b> 사람·커튼·선풍기 바람은 유령 얼룩이 되고, 거울은 가짜 방을 만들어요.<br />
     <b>6. 조명 켜기/끄기를 쓰려면</b> 같은 공간을 낮(자연광)과 밤(조명만) 두 번 찍어 주세요.
-    <div style="margin-top:10px"><a href="/guide" target="_blank" style="color:var(--warm);font-weight:700;text-decoration:none">자세한 촬영 가이드 보기 →</a></div>
+    <div style="margin-top:10px"><a href="/docs/guide" target="_blank" style="color:var(--warm);font-weight:700;text-decoration:none">자세한 촬영 가이드 보기 →</a></div>
   </div>
+  <h2>문서</h2>
+  <div class="card guide" id="docs"></div>
 </div>
 <script>
 const $ = (s) => document.querySelector(s);
@@ -307,6 +309,9 @@ async function refreshSpend() {
 }
 refreshSpend();
 setInterval(refreshSpend, 60000);
+fetch("/api/docs").then((r) => r.json()).then((ds) => {
+  $("#docs").innerHTML = ds.map((d) => `<a href="/docs/${d.key}" target="_blank" style="display:inline-block;margin:4px 14px 4px 0;color:var(--warm);font-weight:700;text-decoration:none">${d.title} →</a>`).join("");
+});
 
 async function refresh() {
   const [jobs, scenes] = await Promise.all([fetch("/api/jobs").then((r) => r.json()), fetch("/api/scenes").then((r) => r.json())]);

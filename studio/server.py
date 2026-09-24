@@ -83,31 +83,50 @@ def index():
     return FileResponse(Path(__file__).with_name("index.html"))
 
 
+DOCS = {"guide": ("촬영 가이드", "CAPTURE_GUIDE.md"), "interaction": ("인터랙션 설계", "INTERACTION.md"),
+        "quality": ("화질 비교", "QUALITY.md"), "study": ("사용자 실험 설계 초안", "STUDY_DRAFT.md"),
+        "report": ("작업 보고 9/24", "REPORT-2026-09-24.md"), "remote": ("원격 업로드 방법", "REMOTE_UPLOAD.md")}
+
+
+@app.get("/api/docs")
+def docs_list():
+    return [{"key": k, "title": t} for k, (t, f) in DOCS.items() if (ROOT / "docs" / f).exists()]
+
+
 @app.get("/guide")
 def guide():
-    """The full capture guide (docs/CAPTURE_GUIDE.md) rendered as a simple page."""
+    return doc("guide")
+
+
+@app.get("/docs/{key}")
+def doc(key: str):
+    """Project documents (docs/*.md) rendered as simple pages for non-developers."""
     import markdown
-    body = markdown.markdown((ROOT / "docs" / "CAPTURE_GUIDE.md").read_text(encoding="utf-8"), extensions=["tables", "fenced_code"])
+    if key not in DOCS:
+        raise HTTPException(404)
+    title, fname = DOCS[key]
+    body = markdown.markdown((ROOT / "docs" / fname).read_text(encoding="utf-8"), extensions=["tables", "fenced_code"])
     body = body.replace("[ ]", "<input type=checkbox>")
     return HTMLResponse(f"""<!doctype html><html lang=ko><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>촬영 가이드 · SplatTour</title>
+<title>{title} · SplatTour</title>
 <link rel=stylesheet href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
 body{{margin:0;background:#f6f4f0;color:#1b1a18;font-family:"Pretendard Variable",system-ui,sans-serif;-webkit-font-smoothing:antialiased}}
-main{{max-width:780px;margin:0 auto;padding:48px 20px 96px;line-height:1.75;font-size:16px}}
-h1{{font-size:32px;letter-spacing:-.03em;margin:0 0 12px}} h2{{font-size:21px;letter-spacing:-.02em;margin:44px 0 12px}} h3{{font-size:17px;margin:26px 0 8px}}
+main{{max-width:820px;margin:0 auto;padding:48px 20px 96px;line-height:1.75;font-size:16px}}
+nav a{{color:#c8793a;text-decoration:none;font-weight:700;font-size:14px}}
+h1{{font-size:32px;letter-spacing:-.03em;margin:14px 0 12px}} h2{{font-size:21px;letter-spacing:-.02em;margin:44px 0 12px}} h3{{font-size:17px;margin:26px 0 8px}}
 p,li{{color:#3b3833}} b,strong{{color:#1b1a18}}
-blockquote{{margin:18px 0;padding:14px 18px;background:#fff;border-left:4px solid #c8793a;border-radius:10px;font-size:17px}}
+blockquote{{margin:18px 0;padding:14px 18px;background:#fff;border-left:4px solid #c8793a;border-radius:10px;font-size:16px}}
 blockquote p{{margin:0;color:#1b1a18}}
-table{{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;border-radius:12px;overflow:hidden;font-size:14.5px}}
+table{{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;border-radius:12px;overflow:hidden;font-size:14.5px;display:block;overflow-x:auto}}
 th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #e7e2da;vertical-align:top}} th{{background:#f1ece6}}
 pre{{background:#fff;border:1px solid #e7e2da;border-radius:12px;padding:14px;overflow:auto;font-size:13.5px;line-height:1.5}}
-code{{font-family:"Cascadia Mono",Consolas,monospace}} hr{{border:0;border-top:1px solid #e7e2da;margin:36px 0}}
+code{{font-family:"Cascadia Mono",Consolas,monospace;font-size:.92em}} hr{{border:0;border-top:1px solid #e7e2da;margin:36px 0}}
 input[type=checkbox]{{width:17px;height:17px;vertical-align:-3px;margin-right:6px;accent-color:#c8793a}}
 ul{{padding-left:22px}} li{{margin:4px 0}}
-@media print{{body{{background:#fff}}}}
+@media print{{body{{background:#fff}} nav{{display:none}}}}
 </style>
-<main>{body}</main></html>""")
+<main><nav><a href="/">← 스튜디오로</a></nav>{body}</main></html>""")
 
 
 @app.get("/api/config")
