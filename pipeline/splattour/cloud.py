@@ -192,6 +192,7 @@ def _flag(help_text: str, name: str) -> str:
 
 
 def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: int = 4_000_000, max_hours: float = 4.0,
+                       bilateral_grid: bool = False,
                        community: bool = False, progress: Callable[[dict], None] | None = None) -> dict:
     """dataset: folder with images/ and sparse/0/ (undistorted PINHOLE)."""
     out.mkdir(parents=True, exist_ok=True)
@@ -222,7 +223,11 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         info["gsplat"] = (re.findall(r"SETUP_DONE (\S+)", setup) or [""])[0]
         help_text = ssh.run("cd /workspace/gsplat/examples && python simple_trainer.py mcmc --help", check=False, log=log)
         f = lambda n: _flag(help_text, n)  # noqa: E731
-        bilagrid = f("use_bilateral_grid") in help_text
+        # Off by default: the per-image bilateral grid soaks up exposure/vignetting,
+        # which leaves the *base* colours drifting from the photos (measured on
+        # playroom: 20.6 dB vs 24.8 dB, error = smooth brightness field). Locked
+        # exposure at capture (docs/CAPTURE_GUIDE.md) is the better fix.
+        bilagrid = bilateral_grid and f("use_bilateral_grid") in help_text
         args = ["python simple_trainer.py mcmc", f"{f('data_dir')} /workspace/data",
                 f"{f('data_factor')} 1", f"{f('result_dir')} /workspace/result",
                 f("no_normalize_world_space") if f("no_normalize_world_space") in help_text else f"{f('normalize_world_space')} False",
