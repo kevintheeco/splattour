@@ -520,6 +520,10 @@ async function main() {
 
   // First-visit coaching (look → move → get close), see coach.js
   const coach = new Coach($("#hint"), params);
+  // User-study logging, loaded only with ?study=<participant> (see study.js)
+  if (params.has("study")) {
+    import("./study.js").then((s) => { window.__study = s.start({ nav, look, rig, params, canvas, tour, getMode: () => mode }); }).catch((e) => console.warn("[study]", e));
+  }
   function hideHint() {} // moves report to the coach via the arrive/depart events instead
   look.addEventListener("interact", () => { const m0 = look.yaw; setTimeout(() => { if (Math.abs(look.yaw - m0) > 0.15 || look.moved > 40) coach.did("look"); }, 700); });
   nav.addEventListener("depart", () => coach.did("move"));

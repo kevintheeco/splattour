@@ -249,6 +249,34 @@ async def finish_upload(uid: str, spec: dict):
     return {"name": name}
 
 
+STUDY = ROOT / "data" / "study"
+
+
+@app.post("/api/study/{pid}")
+async def study_log(pid: str, request: Request):
+    """Append a batch of user-study events (viewer study.js) to
+    data/study/<pid>/<session>.jsonl — one file per session, never overwritten."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400)
+    pid = re.sub(r"[^\w-]", "", pid)[:40] or "anon"
+    session = re.sub(r"[^\w-]", "", str(body.get("session", "")))[:80] or "session"
+    events = body.get("events") or []
+    d = STUDY / pid
+    d.mkdir(parents=True, exist_ok=True)
+    with open(d / f"{session}.jsonl", "a", encoding="utf-8") as f:
+        for e in events:
+            f.write(json.dumps(e, ensure_ascii=False) + chr(10))
+    return {"ok": True, "n": len(events)}
+
+
+@app.get("/api/study")
+def study_sessions():
+    return [{"pid": p.parent.name, "session": p.stem, "events": sum(1 for _ in open(p, encoding="utf-8"))}
+            for p in sorted(STUDY.glob("*/*.jsonl"))] if STUDY.exists() else []
+
+
 @app.get("/api/cloud")
 def cloud_status():
     """This month's cloud training spend vs the budget (see pipeline cloud.py)."""
