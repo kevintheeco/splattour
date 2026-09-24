@@ -106,14 +106,20 @@ def export_web(scene_dir: Path, floaters: bool = False, fmt: str = "spz") -> dic
     floaters), and point tour.json at it. The .ply is kept for analysis."""
     src = scene_dir / "scene.ply"
     dst = scene_dir / f"scene.{fmt}"
-    args = [str(SPLAT_TRANSFORM), "-w", str(src), "-N"]
-    if floaters:
-        args += ["-F"]
-    args += [str(dst)]
     t0 = time.time()
-    r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-    if r.returncode != 0:
-        raise RuntimeError(f"splat-transform failed: {r.stderr[-800:]}")
+    if fmt == "spz" and not floaters:
+        # In-house SPZ v2 encoder: Spark reads SPZ only up to v3, while
+        # splat-transform writes v4.
+        from .spz import ply_to_spz
+        ply_to_spz(src, dst)
+    else:
+        args = [str(SPLAT_TRANSFORM), "-w", str(src), "-N"]
+        if floaters:
+            args += ["-F"]
+        args += [str(dst)]
+        r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+        if r.returncode != 0:
+            raise RuntimeError(f"splat-transform failed: {r.stderr[-800:]}")
     tour_p = scene_dir / "tour.json"
     tour = json.loads(tour_p.read_text(encoding="utf-8"))
     tour["splat"] = dst.name

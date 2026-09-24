@@ -49,7 +49,10 @@ uniform vec4  stLightState[${MAX_LIGHTS}]; // x = on (0..1), y = captured-on (0/
 float stFalloff(float d, float r) {
   float x = d / max(r, 1e-3);
   float w = clamp(1.0 - x * x * x * x, 0.0, 1.0);
-  return w * w / (1.0 + 1.5 * x * x);
+  // Windowed inverse-square: bright pool under the lamp, walls a few metres
+  // away fall off instead of the whole room lighting up evenly.
+  float y = x / 0.35;
+  return w * w / (1.0 + y * y);
 }
 vec3 stLight(vec3 p, vec3 n, vec3 sc, vec3 c) {
   // Only flat Gaussians have a trustworthy normal; blobs get even light so
