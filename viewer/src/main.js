@@ -13,7 +13,7 @@ import { Coach } from "./coach.js";
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
-const sceneName = params.get("scene") || "demo";
+const sceneName = params.get("scene") || import.meta.env.VITE_DEFAULT_SCENE || "demo"; // web deploy sets its showcase scene
 const baseUrl = new URL(`/scenes/${encodeURIComponent(sceneName)}/`, location.href);
 
 // ---------- renderer / scene ----------
