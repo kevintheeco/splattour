@@ -1,0 +1,44 @@
+{
+  "model_dir": "C:\\Users\\kevin\\Desktop\\주희\\data\\samples\\deepblending_drjohnson\\colmap\\sparse\\0",
+  "splat": "C:\\Users\\kevin\\Desktop\\주희\\data\\jobs\\drjohnson-hq\\train\\splat.ply",
+  "num_images": 263,
+  "num_points3d": 80777,
+  "num_splats": 2000000,
+  "alignment": {
+    "floor_inlier_frac": 0.9634710274096463,
+    "median_cam_height_sfm": 1.6994240645130934,
+    "camera_up_agreement": 0.6939607326753571,
+    "manhattan_yaw_deg": 87.49999999999999,
+    "floor_from_ransac": true,
+    "scale": 0.8532302385722915
+  },
+  "graph": {
+    "cameras": 263,
+    "nodes": 18,
+    "edges": 30,
+    "walk_edges": 14,
+    "fade_links": [],
+    "eye_height": 1.4499999999999997,
+    "mean_degree": 3.3333333333333335
+  },
+  "dropped_cameras": [],
+  "lights": [
+    {
+      "name": "천장등 1",
+      "position": [
+        -1.771,
+        2.071,
+        -0.42
+      ],
+      "score": 106,
+      "kind": "ceiling",
+      "shell": 0.117
+    }
+  ],
+  "params": {
+    "capture_height": 1.45,
+    "spacing": 1.3,
+    "max_edge": 4.0
+  },
+  "seconds": 1.51
+}
