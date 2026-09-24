@@ -13,6 +13,7 @@ after `max_hours` even if this machine loses power mid-run.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import shutil
@@ -365,6 +366,11 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
                 f"{f('test_every')} {test_every}", f("disable_viewer")]
         if bilagrid:
             args.append(f("use_bilateral_grid"))
+        # experiment switches, e.g. SPLATTOUR_TRAIN_FLAGS="app_opt" (per-photo appearance, for
+        # captures whose exposure changes shot to shot, like Zip-NeRF)
+        for flag in os.environ.get("SPLATTOUR_TRAIN_FLAGS", "").split():
+            name, _, value = flag.partition("=")
+            args.append(f"{f(name)} {value}" if value else f(name))
         cmd = " ".join(args)
         info["command"] = cmd
         ssh.run(f"cd /workspace/gsplat/examples && setsid nohup {cmd} > /workspace/train.log 2>&1 < /dev/null & echo started", log=log)
@@ -470,7 +476,8 @@ def runner_env() -> dict:
     adm, web = kv("r2.txt"), kv("r2-web.txt")
     bundle = (SECRETS / "runner_bundle.txt").read_text().strip()
     return {"R2_ACCOUNT_ID": adm["ACCOUNT_ID"], "R2_ACCESS_KEY_ID": web["ACCESS_KEY_ID"], "R2_SECRET_ACCESS_KEY": web["SECRET_ACCESS_KEY"],
-            "BUNDLE_URL": f"{adm['PUBLIC_URL'].rstrip('/')}/{bundle}", "MAX_HOURS": "5"}
+            "BUNDLE_URL": f"{adm['PUBLIC_URL'].rstrip('/')}/{bundle}", "MAX_HOURS": "5",
+            "VOCAB_URL": f"{adm['PUBLIC_URL'].rstrip('/')}/{(SECRETS / 'runner_vocab.txt').read_text().strip()}"}
 
 
 RUNNER_CMD = ('mkdir -p /workspace/st && curl -fsSL "$BUNDLE_URL" | tar xz -C /workspace/st && '

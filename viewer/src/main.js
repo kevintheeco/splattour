@@ -287,8 +287,13 @@ async function main() {
     if (mode === "pano") {
       if (pano.fade) return;
       const from = nav.current;
-      await pano.transition(node, look);
-      nav.jumpTo(node, { yaw: from ? yawOf(new THREE.Vector3().subVectors(node.position, from.position)) : node.yaw, pitch: 0 });
+      // Arrive facing open space, with the same rule as the 3D flight (navigator.headingFn),
+      // so the two study conditions differ only in how you move, not in what you face.
+      // The view turns toward it during the cross-fade (no snap afterwards).
+      const travel = from ? yawOf(new THREE.Vector3().subVectors(node.position, from.position)) : node.yaw;
+      const arriveYaw = nav.headingFn ? nav.headingFn(node.position, travel) : travel;
+      await pano.transition(node, look, 0.9, arriveYaw);
+      nav.jumpTo(node, { yaw: look.yaw, pitch: look.pitch });
       pano.prefetch(tour.neighbors(node));
       return;
     }

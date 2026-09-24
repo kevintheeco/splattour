@@ -16,3 +16,4 @@ web-deploy/
 scenes/**/photos/
 scenes/index.json
 web-api/node_modules/
+docs/video/

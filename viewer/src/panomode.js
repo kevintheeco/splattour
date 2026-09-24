@@ -131,12 +131,14 @@ export class PanoMode {
   }
 
   // Cross-fade to another node. Resolves when the fade completes.
-  async transition(to, look, duration = 0.9) {
+  // targetYaw (optional): turn the view smoothly toward it during the fade.
+  async transition(to, look, duration = 0.9, targetYaw = null) {
     const cube = await this.cubeFor(to);
     this.material.uniforms.mapB.value = cube;
     this.material.uniforms.mixAB.value = 0;
     return new Promise((resolve) => {
-      this.fade = { t: 0, duration, resolve, look, baseFov: look.fov };
+      const turn = targetYaw === null ? 0 : Math.atan2(Math.sin(targetYaw - look.yaw), Math.cos(targetYaw - look.yaw));
+      this.fade = { t: 0, duration, resolve, look, baseFov: look.fov, yaw0: look.yaw, turn };
     });
   }
 
@@ -148,6 +150,7 @@ export class PanoMode {
     f.t = Math.min(1, f.t + dt / f.duration);
     const e = f.t * f.t * (3 - 2 * f.t);
     this.material.uniforms.mixAB.value = e;
+    if (f.turn) f.look.yaw = f.yaw0 + f.turn * e;
     // conventional tours zoom in while fading, then snap back
     f.look.fovKick = -12 * Math.sin(Math.PI * Math.min(1, f.t * 1.1)) * (1 - f.t * 0.2);
     if (f.t >= 1) {

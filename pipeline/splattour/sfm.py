@@ -100,16 +100,35 @@ def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_
     the cloud GPU: SIFT extraction and matching on the GPU). Used where the COLMAP
     executable is not installed (Linux GPU servers)."""
     iso = os.environ.get("SPLATTOUR_SFM_PYTHON")
-    if iso and Path(iso).resolve() != Path(sys.executable).resolve():
+    if matcher == "auto" and os.environ.get("SPLATTOUR_GPU") == "1":
+        n_img = len(list(images.glob("*.jpg")))
+        if n_img <= 1200 and not ordered:
+            # On the GPU server the vocabulary-tree search (faiss) crashed on one host and
+            # deadlocked on another (2026-09-25). Comparing every pair runs on the GPU and is
+            # reliable at this size; matches are a superset of the vocab-tree ones.
+            matcher = "exhaustive"
+    if iso:  # (the isolated run itself clears this variable, see __main__; venv pythons resolve to the same binary, so no path check)
         # On the GPU server gsplat's tools ship a different package also named
         # "pycolmap"; SfM runs in its own environment to keep the two apart.
         import json as _json
         work.mkdir(parents=True, exist_ok=True)
-        r = subprocess.run([iso, "-m", "splattour.sfm", str(images), str(work), matcher, str(max_image_size), "1" if ordered else "0"],
-                           capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]))
+        def cmd(m):
+            try:
+                return subprocess.run([iso, "-m", "splattour.sfm", str(images), str(work), m, str(max_image_size), "1" if ordered else "0"],
+                                      capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]), timeout=3 * 3600)
+            except subprocess.TimeoutExpired as e:  # a hang must fail loudly, not keep the GPU server busy
+                return subprocess.CompletedProcess(e.cmd, 1, "", f"SfM timed out after 3 h (matcher {m}) faiss?")
+        r = cmd(matcher)
+        if r.returncode != 0 and "faiss" in (r.stderr + r.stdout) and matcher in ("auto", "vocab"):
+            # the vocabulary-tree search (faiss) crashed on a GPU host (2026-09-25): compare
+            # every pair on the GPU instead; slower, same or better matches
+            (work / "sfm_stdout_vocab_failed.log").write_text(r.stdout + r.stderr, encoding="utf-8")
+            r = cmd("exhaustive")
         (work / "sfm_stdout.log").write_text(r.stdout + r.stderr, encoding="utf-8")
         if r.returncode != 0:
-            raise RuntimeError("SfM failed: " + (r.stderr or r.stdout)[-800:])
+            out = r.stderr or r.stdout
+            key = [l for l in out.splitlines() if "Check failed" in l or l[:1] in ("F", "E") and l[1:5].isdigit()]
+            raise RuntimeError("SfM failed: " + " | ".join(key[:3]) + " … " + out[-500:])
         return _json.loads(r.stdout.strip().splitlines()[-1])
     import pycolmap
     work.mkdir(parents=True, exist_ok=True)
@@ -135,10 +154,14 @@ def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_
     elif matcher == "vocab":
         po = pycolmap.VocabTreePairingOptions()
         po.num_images = min(60, max(20, n // 5))
+        if os.environ.get("SPLATTOUR_VOCAB"):  # shipped with the runner (no download from the GPU server)
+            po.vocab_tree_path = os.environ["SPLATTOUR_VOCAB"]
         pycolmap.match_vocabtree(db, pairing_options=po, device=dev)
     else:
         po = pycolmap.SequentialPairingOptions()
         po.overlap, po.quadratic_overlap, po.loop_detection = 15, True, True
+        if os.environ.get("SPLATTOUR_VOCAB"):
+            po.vocab_tree_path = os.environ["SPLATTOUR_VOCAB"]
         pycolmap.match_sequential(db, pairing_options=po, device=dev)
     t["matching"] = time.time() - t0
     t0 = time.time()
