@@ -221,7 +221,7 @@ clip 번호는 파일 이름순: 0 = `_0007`(앞마당 → 끝에 어두운 실�
 - **학습**: 월하정 게시본과 같은 방식(MCMC 500만, 60k = 30k×steps_scaler 2, antialiased, 정규화 자동 = 0.01·300/사진수, bilateral grid·app_opt 없음), 8장마다 1장 시험용.
   - WithVision 비교에서 나온 요청(흰 회벽의 분홍/초록 얼룩 = 시점 의존 색(SH) 과다, 불투명도 0.05 미만 42%): 한 번의 학습만 예산에 들어가 A/B 대신 가장 유력한 것을 넣음 → **SH 차수 올리는 간격 1k → 4k**(`--train-flags sh_degree_interval=2000`, steps_scaler 2로 4000; SH 3차는 12k부터). f_rest L2 벌점은 gsplat에 옵션이 없어 이번엔 뺌.
   - **학습 뒤 가지치기**: 불투명도 < 0.02 가우시안을 뺀 모델과 안 뺀 모델을 같은 시험 사진 24장으로 비교(`prune_eval.json`), 0.05 dB 넘게 안 떨어질 때만 뺀 것을 장면으로(`--prune-opacity 0.02`, `prune_ply`). antialiasing은 그대로.
-- 다운로드: 버킷이 APAC, GPU 서버는 주로 미국·유럽 → 연결 하나가 느림. 첫 시도(pod 4webljp4jz3np5, boto3 연결 144개)는 R2가 SSL을 끊어 5분 만에 실패($0.07). 지금은 `parallel_download`: 32 MB 구간 GET 40개 동시, 구간마다 8번까지 재시도, 속도·재시도 수를 `result.json`의 `download`에 남김. 두 번째 실행 pod e2pxahr4m3cyrw는 다운로드 4분(24 GB 중 20 GB)까지 확인하고, 아래 SH/가지치기 요청을 넣으려고 지운 뒤 **세 번째 pod xooagvb8biyziu (L40 $0.82/h, 20:00 UTC 시작)**로 다시 띄움.
+- 다운로드: 버킷이 APAC, GPU 서버는 주로 미국·유럽 → 연결 하나가 느림. 첫 시도(pod 4webljp4jz3np5, boto3 연결 144개)는 R2가 SSL을 끊어 5분 만에 실패($0.07). 지금은 `parallel_download`: 32 MB 구간 GET 40개 동시, 구간마다 8번까지 재시도. **실측: 21.7 GB를 35초(622 MB/s, 재시도 0)** — 첫 실행은 같은 양에 약 1.5시간. 두 번째 실행 pod e2pxahr4m3cyrw는 다운로드 4분(24 GB 중 20 GB)까지 확인하고, 아래 SH/가지치기 요청을 넣으려고 지운 뒤 **세 번째 pod xooagvb8biyziu (L40 $0.82/h, 20:00 UTC 시작)**로 다시 띄움.
 - 360 지점·채우기는 학습과 동시에(`--nav-parallel`), 모든 클립에서(이제 passes로 판정).
 - R2: `cloud/pano360/wolhajeong360-hq/`(공개 목록에는 넣지 않음, 링크 전용 `/tour.html?scene=wolhajeong360-hq&from=cloud`).
 

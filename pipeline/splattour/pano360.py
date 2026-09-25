@@ -791,6 +791,8 @@ def rig_sfm(views_dir: Path, masks_dir: Path, work: Path, rig: dict, matcher: st
     py = os.environ.get("SPLATTOUR_SFM_PYTHON") or sys.executable
     env = {**os.environ}
     env.pop("SPLATTOUR_SFM_PYTHON", None)
+    if pairs:  # prior pairs already give the loops / cross-clip links; the vocabulary tree only costs time
+        env.pop("SPLATTOUR_VOCAB", None)  # (2026-09-26: indexing 10200 images at 0.1 s each, then a crash-prone search)
     t = time.time()
     def run(e, logname):
         with open(work / logname, "w", encoding="utf-8") as lf:
