@@ -12,6 +12,7 @@ import { Lighting } from "./lighting.js";
 import { TourAudio } from "./audio.js";
 import { Coach } from "./coach.js";
 import { Photos } from "./photos.js";
+import { Cinema } from "./cinema.js";
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -782,6 +783,25 @@ async function main() {
   if (params.has("study")) {
     import("./study.js").then((s) => { window.__study = s.start({ nav, look, rig, params, canvas, tour, getMode: () => mode }); }).catch((e) => console.warn("[study]", e));
   }
+  // Cinematic auto-camera along the walked path (cinema.js): tour page only,
+  // never in the study or the listing app. ?cinema=1 starts it, C toggles.
+  const cinema = !params.has("study") && !app ? new Cinema({ tour, rig, look, baseUrl }) : null;
+  if (cinema) {
+    const startCinema = async () => {
+      if (mode !== "splat") return;
+      if (autoTour) stopAuto();
+      if (nav.busy) nav.stop();
+      if (await cinema.start()) toast("시네마틱 둘러보기 · 화면을 누르거나 키를 누르면 멈춰요", 3000);
+    };
+    window.addEventListener("keydown", (e) => {
+      if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === "KeyC") { if (cinema.active) cinema.stop(); else startCinema(); }
+      else if (cinema.active) cinema.stop();
+    });
+    look.addEventListener("interact", () => cinema.stop());
+    canvas.addEventListener("pointerdown", () => cinema.stop());
+    if (params.get("cinema") === "1") startCinema();
+  }
   function hideHint() {} // moves report to the coach via the arrive/depart events instead
   look.addEventListener("interact", () => { const m0 = look.yaw; setTimeout(() => { if (Math.abs(look.yaw - m0) > 0.15 || look.moved > 40) coach.did("look"); }, 700); });
   nav.addEventListener("depart", () => coach.did("move"));
@@ -985,6 +1005,7 @@ async function main() {
       // walking pace needs only a hint of the comfort vignette
       const vk = keyVel.length();
       if (vignetteOn) vignette.style.opacity = nav.busy ? Math.min(1, nav.speedNow / (walkMode ? 4 : 2.2)).toFixed(3) : vk > 0.05 ? Math.min(1, vk / 4).toFixed(3) : "0";
+      if (cinema?.active) { if (mode === "splat") cinema.update(dt); else cinema.stop(); }
       look.update(dt);
       updateHover(now);
     }
@@ -1025,7 +1046,7 @@ async function main() {
   });
 
   // Debug / automation hooks (used by the evaluation scripts).
-  window.splattour = { walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat) };
+  window.splattour = { walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat) };
 }
 
 main().catch((err) => {
