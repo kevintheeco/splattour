@@ -197,7 +197,7 @@ def fill_one(sc: Scene, name: str, out_dir: Path, max_sources: int = 10, nadir_d
         gain = np.ones(3, np.float32)
         if rr.sum() > 200:
             a, b = pano[rr].astype(np.float32), samp[rr]
-            gain = np.clip(np.median(a, 0) / np.maximum(np.median(b, 0), 1), 0.6, 1.6)
+            gain = np.clip(np.median(a, 0) / np.maximum(np.median(b, 0), 1), 0.25, 4.0)  # auto exposure swings a lot in dark rooms
         # second opinion: where an earlier frame already filled, does this frame see the same colour?
         vis = cv2.resize(vis_small.astype(np.uint8), (W0, H0), interpolation=cv2.INTER_NEAREST) > 0
         cmp_ = vis & hole & ~todo & ~checked
