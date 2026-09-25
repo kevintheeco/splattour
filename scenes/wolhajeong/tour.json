@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "title": "월하정",
+  "subtitle": "앞마당과 대문 통로를 걸어 보는 3D 공간",
+  "splat": "scene.spz",
+  "splatTransform": {
+    "position": [
+      0.6888647960394503,
+      1.4007391187485212,
+      3.978892614890149
+    ],
+    "quaternion": [
+      -0.5226246827520014,
+      0.0008461147643348266,
+      0.8521125464617813,
+      0.027693559370258844
+    ],
+    "scale": 0.7859804068701077
+  },
+  "eyeHeight": 1.45,
+  "start": "n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "name": "시점 1",
+      "position": [
+        0.7945,
+        1.45,
+        2.2781
+      ],
+      "yaw": -2.6639,
+      "floorY": 0.0,
+      "camera": 17,
+      "image": "Take-01_00026.png"
+    },
+    {
+      "id": "n1",
+      "name": "시점 2",
+      "position": [
+        0.2713,
+        1.45,
+        3.6114
+      ],
+      "yaw": -2.669,
+      "floorY": 0.0,
+      "camera": 23,
+      "image": "Take-01_00032.png"
+    },
+    {
+      "id": "n2",
+      "name": "시점 3",
+      "position": [
+        -0.4155,
+        1.45,
+        6.7533
+      ],
+      "yaw": -2.5121,
+      "floorY": 0.0,
+      "camera": 226,
+      "image": "Take-01_00244.png"
+    },
+    {
+      "id": "n3",
+      "name": "시점 4",
+      "position": [
+        2.5127,
+        1.45,
+        4.6313
+      ],
+      "yaw": 1.0447,
+      "floorY": 0.0,
+      "camera": 256,
+      "image": "Take-01_00274.png"
+    },
+    {
+      "id": "n4",
+      "name": "시점 5",
+      "position": [
+        -0.3738,
+        1.45,
+        0.6565
+      ],
+      "yaw": -2.2309,
+      "floorY": 0.0,
+      "camera": 459,
+      "image": "Take-01_00506.png"
+    },
+    {
+      "id": "n5",
+      "name": "시점 6",
+      "position": [
+        -0.5069,
+        1.45,
+        4.661
+      ],
+      "yaw": -2.2285,
+      "floorY": 0.0,
+      "camera": 480,
+      "image": "Take-01_00527.png"
+    },
+    {
+      "id": "n6",
+      "name": "시점 7",
+      "position": [
+        0.1952,
+        1.45,
+        7.9397
+      ],
+      "yaw": -0.5524,
+      "floorY": 0.0,
+      "camera": 497,
+      "image": "Take-01_00544.png"
+    },
+    {
+      "id": "n7",
+      "name": "시점 8",
+      "position": [
+        1.3528,
+        1.45,
+        6.9918
+      ],
+      "yaw": 0.1165,
+      "floorY": 0.0,
+      "camera": 505,
+      "image": "Take-01_00552.png"
+    },
+    {
+      "id": "n8",
+      "name": "시점 9",
+      "position": [
+        0.725,
+        1.45,
+        -0.3376
+      ],
+      "yaw": -1.4467,
+      "floorY": 0.0,
+      "camera": 694,
+      "image": "Take-01_00786.png"
+    },
+    {
+      "id": "n9",
+      "name": "시점 10",
+      "position": [
+        2.4238,
+        1.45,
+        6.0222
+      ],
+      "yaw": 0.9001,
+      "floorY": 0.0,
+      "camera": 758,
+      "image": "Take-01_00850.png"
+    },
+    {
+      "id": "n10",
+      "name": "시점 11",
+      "position": [
+        1.5794,
+        1.45,
+        3.5508
+      ],
+      "yaw": 2.8312,
+      "floorY": 0.0,
+      "camera": 773,
+      "image": "Take-01_00865.png"
+    }
+  ],
+  "edges": [
+    [
+      "n0",
+      "n1"
+    ],
+    [
+      "n0",
+      "n10"
+    ],
+    [
+      "n0",
+      "n4"
+    ],
+    [
+      "n1",
+      "n10"
+    ],
+    [
+      "n1",
+      "n2"
+    ],
+    [
+      "n1",
+      "n5"
+    ],
+    [
+      "n2",
+      "n3"
+    ],
+    [
+      "n2",
+      "n5"
+    ],
+    [
+      "n2",
+      "n6"
+    ],
+    [
+      "n3",
+      "n10"
+    ],
+    [
+      "n3",
+      "n9"
+    ],
+    [
+      "n4",
+      "n5"
+    ],
+    [
+      "n4",
+      "n8"
+    ],
+    [
+      "n5",
+      "n6"
+    ],
+    [
+      "n6",
+      "n7"
+    ],
+    [
+      "n7",
+      "n9"
+    ],
+    [
+      "n9",
+      "n10"
+    ]
+  ],
+  "fadeLinks": [],
+  "lights": [],
+  "splatMobile": "scene.mobile.spz",
+  "photos": "photos/photos.json",
+  "lod": {
+    "splat": "lod/scene-lod.rad",
+    "occupancy": "lod/occupancy.bin",
+    "plan": "lod/plan.png",
+    "thumbs": "lod/thumbs/{id}.jpg"
+  }
+}

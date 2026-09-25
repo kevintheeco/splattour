@@ -48,7 +48,7 @@ MAX_STAGES = [
 # RunPod secure-cloud $/h (API, 2026-09-25), for the ledger when the server cannot look its own price up
 PRICE = {"NVIDIA H100 80GB HBM3": 3.49, "NVIDIA H100 PCIe": 2.89, "NVIDIA H100 NVL": 3.19, "NVIDIA H200": 4.59,
          "NVIDIA A100-SXM4-80GB": 1.59, "NVIDIA A100 80GB PCIe": 1.59, "NVIDIA L40S": 1.09, "NVIDIA RTX 6000 Ada Generation": 0.84,
-         "NVIDIA RTX A6000": 0.53, "NVIDIA A40": 0.49, "NVIDIA GeForce RTX 4090": 0.69}
+         "NVIDIA RTX A6000": 0.53, "NVIDIA A40": 0.49, "NVIDIA GeForce RTX 4090": 0.74, "NVIDIA L40": 0.82}
 DEFAULTS = {"side": 3200, "cap": 5_500_000, "steps": 60_000, "final": True, "mobile_cap": 1_500_000, "steps_scaler": 2}
 
 

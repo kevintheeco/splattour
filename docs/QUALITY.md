@@ -94,3 +94,26 @@ python -m splattour.compare_sheet data/jobs/playroom/sfm/dense/images out.png A=
 - 원인: gsplat MCMC의 opacity/scale 정규화(0.01)는 모든 가우시안에 매 스텝 걸리는데, 사진이 많고 공간이 넓으면 각 가우시안이 보이는 사진이 적어 정규화가 이긴다. → 사진 수에 반비례해 자동 조정(`cloud.mcmc_reg_flags`, 0.01·300/n).
 - 한계: 이 장면은 모든 설정에서 뷰어 기준 약 18 dB, 벽·가까운 물체가 번진다. 3DGS 계열 논문의 Zip-NeRF 보고치(대략 20~22 dB, 절반 해상도)와 비슷한 수준. 시연용 "실사급"은 촬영 단계(노출 고정·가까운 거리 반복 촬영)가 결정한다.
 - 공개 목록에는 올리지 않음. 링크로만: `/tour.html?scene=alameda&from=cloud`.
+
+## 8. 2026-09-25: 월하정 (주희 촬영 영상 872프레임, 1920×960) — 장면 `wolhajeong`
+
+촬영본은 앞마당을 여러 바퀴 돌며 대문 통로(어두움)를 9번 드나드는 영상이다. 실내(사랑방·안채·부엌)는 이 영상에 없다(창문 너머로만 보임).
+
+| 단계 | 설정 | 결과 |
+|---|---|---|
+| SfM | SIFT(GPU) 1920px, 어두운 프레임은 SfM 사본만 감마+CLAHE, 한 카메라 OPENCV, sequential(overlap 30, quadratic) + loop detection(2프레임마다, 60장), GLOMAP global mapper | **모델 1개, 872/872 등록, 재투영 0.654px**, 점 29만. 초점 532px → 가로 화각 122°, 왜곡 계수 ≈ 0(직선 투영 영상이라 fisheye 불필요) |
+| 정리 | 앞뒤 프레임 궤적과 0.6(SfM 단위) 넘게 어긋난 카메라 + 대문 앞 686~704 제거 | 784장 사용. 어긋난 88장은 전부 어두운 대문 통로(590번은 72 km 밖) |
+| 학습 A (게시) | gsplat MCMC 500만, 60k(steps_scaler 2), 원본 해상도, reg 0.0038, 보정 없음 | **PSNR 29.67 / SSIM 0.896 / LPIPS 0.110** (8장마다 1장 시험, 98장), H100 33분 |
+| 학습 B | A + bilateral grid(사진별 노출 보정) | 26.85 / 0.832 / 0.123 (노출 맞춤 후 28.78) — A보다 나쁨 |
+
+- 참고: 같은 방식의 Dr Johnson 점수용 모델 29.39 / 0.910 / 0.185. 월하정이 PSNR·LPIPS는 더 좋고 SSIM은 조금 낮다(어두운 통로의 압축 노이즈).
+- 첫 학습은 72 km 밖 카메라가 섞인 채 시작해 손실 0.42에서 멈춤 → 카메라 정리 후 0.05. **SfM 뒤 궤적 연속성 검사는 필수.**
+- 웹: scene.spz 131 MB(500만), 휴대폰 scene.mobile.spz 28 MB(150만, SH1), 휴대폰 LoD 93조각 308 MB(R2 스트리밍). 노트북(Intel Arc) 27 fps.
+- 비용: RunPod 충전분에서 $14.77(L40S SfM 2.1시간 + H100 학습 2대 + 대기 중 버린 H100 2대 37분). 그 전의 첫 시도(H100 SfM 3대, 자동 경로 4090)는 잔액 소진으로 모두 강제 종료.
+
+### 나중에 실내 촬영을 같은 좌표계에 붙이는 법
+R2 `cloud/max/20260925-f0b277376aab/sfm-A/sfm_keep.tgz`(노트북 `data/jobs/wolhajeong/sfmA_sfm_keep.tgz`)에 SfM 데이터베이스(`database.db`, 872장 특징·매칭)와 왜곡 모델(`sparse_distorted`, 1920×960 SfM 사본 이름 `.jpg`)이 있다.
+1. 새 프레임도 같은 방식(prep.py: 어두우면 감마+CLAHE, JPEG)으로 SfM 사본을 만들어 같은 폴더에 넣는다.
+2. `feature_extractor`(같은 DB, 새 영상이 다른 카메라면 새 camera) → 새 프레임끼리 sequential+loop, 새↔옛 프레임은 vocab tree 매칭.
+3. `image_registrator`(또는 pycolmap incremental_mapping(input_path=sparse_distorted))로 기존 모델에 등록 → `bundle_adjuster`. 기존 카메라는 고정하면 world 좌표가 그대로 유지된다.
+4. 그 뒤 runner/bench 절차(make_dataset → 궤적 검사 → 학습)를 같은 설정으로. tour.json의 splatTransform은 그대로 써야 capture_path.json·360 핫스팟과 맞는다.

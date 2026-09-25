@@ -1,0 +1,32 @@
+{
+  "model_dir": "..\\data\\jobs\\wolhajeong\\sparse_clean",
+  "splat": "..\\data\\jobs\\wolhajeong\\off\\scene.ply",
+  "num_images": 784,
+  "num_points3d": 285581,
+  "num_splats": 5000000,
+  "alignment": {
+    "floor_inlier_frac": 0.6029876250971713,
+    "median_cam_height_sfm": 1.844829702274791,
+    "camera_up_agreement": 0.9988490253222214,
+    "manhattan_yaw_deg": 3.5,
+    "floor_from_ransac": true,
+    "scale": 0.7859804068701077
+  },
+  "graph": {
+    "cameras": 784,
+    "nodes": 11,
+    "edges": 17,
+    "walk_edges": 7,
+    "fade_links": [],
+    "eye_height": 1.4499999999999993,
+    "mean_degree": 3.090909090909091
+  },
+  "dropped_cameras": [],
+  "lights": [],
+  "params": {
+    "capture_height": 1.45,
+    "spacing": 1.3,
+    "max_edge": 4.0
+  },
+  "seconds": 13.33
+}
