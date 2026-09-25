@@ -74,12 +74,14 @@ function applyTransform(obj, t) {
 
 async function main() {
   const tour = await loadTour(baseUrl);
+  // Inside the listing app (&app=1&space=<id>): the chrome shared with the 360° viewer, see app/appmode.js
+  const app = params.get("app") === "1" ? await import("./app/appmode.js").then((m) => m.prepare({ params, tour })) : null;
   document.title = `${tour.title} · SplatTour`;
   $("#title").textContent = tour.title;
   $("#subtitle").textContent = tour.subtitle;
   $("#loaderTitle").textContent = tour.title;
   // Published site: a way back to the list/upload home.
-  if (import.meta.env.PROD) {
+  if (import.meta.env.PROD && !app) {
     const back = document.createElement("a");
     back.className = "brand-back";
     back.href = "/";
@@ -244,6 +246,7 @@ async function main() {
     return pts;
   }
   if (walkMode) nav.planner = planWalk;
+  app?.limitWalk(walkMap);
   // Study parameters: ?speed=<m/s> flight speed, ?vignette=0 turns the comfort vignette off.
   if (+params.get("speed") > 0) nav.speed = +params.get("speed");
   const vignetteOn = params.get("vignette") !== "0";
@@ -415,7 +418,7 @@ async function main() {
   });
 
   // ---------- modes ----------
-  let mode = params.get("mode") === "pano" ? "pano" : "splat";
+  let mode = params.get("mode") === "pano" && !app ? "pano" : "splat";
   let freeRoam = false;
   const modeBtn = document.querySelector('[data-act="mode"]');
   async function setMode(m) {
@@ -767,6 +770,7 @@ async function main() {
   nav.addEventListener("depart", () => coach.did("move"));
   canvas.addEventListener("dblclick", () => coach.did("close"));
   canvas.addEventListener("wheel", () => coach.did("zoom"), { passive: true });
+  app?.start({ nav, look, rig, canvas, tour }).catch((e) => console.warn("[app]", e));
 
   // Zoomed all the way in and still scrolling → step toward what is under the
   // cursor (a 3D scene can get closer, not just crop the picture).
@@ -899,6 +903,7 @@ async function main() {
     hotspots.update(dt, hoverMarker);
     if (minimap && !$("#minimap").hidden) minimap.draw(nav.current);
     if (streaming) updateStreamPill();
+    app?.frame(dt);
 
     if (autoTour && !nav.busy && !pano.fade) {
       autoTour.wait += dt;

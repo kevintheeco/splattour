@@ -1,0 +1,126 @@
+/* Shared chrome of the two exploration viewers (360° / 3DGS). */
+:root {
+  --vc-ink: #1f1d1a;
+  --vc-muted: #6d6860;
+  --vc-card: rgba(255, 255, 255, 0.94);
+  --vc-accent: #d9534f;
+  --vc-accent-2: #c2413d;
+  --vc-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 10px 28px -10px rgba(0, 0, 0, 0.45);
+  --vc-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+html.pseudo-fs, html.pseudo-fs body { height: 100dvh; overflow: hidden; overscroll-behavior: none; }
+html.pseudo-fs #app { height: 100dvh; }
+
+.vc { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; color: var(--vc-ink); -webkit-font-smoothing: antialiased; word-break: keep-all; }
+.vc > * { pointer-events: auto; }
+.vc [hidden], .vc[hidden], .vc-crosshair[hidden] { display: none !important; }
+.vc .ic { width: 20px; height: 20px; flex: none; }
+
+.vc-top {
+  position: absolute; left: 0; right: 0; top: 0; pointer-events: none;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: calc(10px + var(--sat)) calc(12px + var(--sar)) 10px calc(12px + var(--sal));
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0));
+}
+.vc-top > * { pointer-events: auto; }
+.vc-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer;
+  background: var(--vc-card); color: var(--vc-ink); box-shadow: var(--vc-shadow); text-decoration: none;
+  transition: transform 0.35s var(--vc-ease), background 0.25s var(--vc-ease), color 0.25s var(--vc-ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.vc-btn:active { transform: scale(0.92); }
+.vc-btn.on { background: var(--vc-ink); color: #fff; }
+.vc-btn .ic { width: 19px; height: 19px; }
+.vc-actions { display: flex; gap: 8px; }
+.vc-title { min-width: 0; text-align: center; color: #fff; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45); pointer-events: none; }
+.vc-room { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 20px; }
+.vc-room.pop { animation: vc-pop 0.5s var(--vc-ease); }
+@keyframes vc-pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.vc-sub { font-size: 12px; font-weight: 500; opacity: 0.86; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vc-devtag { display: inline-block; margin-top: 5px; padding: 3px 8px; border-radius: 6px; background: #ffd466; color: #3a2a00; font-size: 11px; font-weight: 700; text-shadow: none; pointer-events: auto; cursor: help; }
+
+/* task card */
+.vc.has-dev .vc-task-slot { top: calc(90px + var(--sat)); }
+.vc-task-slot { position: absolute; left: calc(12px + var(--sal)); right: calc(12px + var(--sar)); top: calc(62px + var(--sat)); pointer-events: none; display: flex; justify-content: center; }
+.vc-task {
+  pointer-events: auto; width: 100%; max-width: 440px; background: var(--vc-card); border-radius: 18px; box-shadow: var(--vc-shadow);
+  padding: 12px 14px 12px 16px; transition: transform 0.45s var(--vc-ease), opacity 0.45s var(--vc-ease);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.vc-task.enter { animation: vc-in 0.55s var(--vc-ease); }
+.vc-task.sent { transform: scale(0.97); opacity: 0.5; }
+@keyframes vc-in { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.vc-task-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--vc-accent-2); letter-spacing: 0.01em; }
+.vc-task-min { width: 30px; height: 30px; margin: -6px -6px -6px 0; border: 0; background: none; color: var(--vc-muted); display: grid; place-items: center; cursor: pointer; border-radius: 50%; }
+.vc-task-min .ic { width: 18px; height: 18px; }
+.vc-task-q { margin: 6px 0 10px; font-size: 15px; font-weight: 600; line-height: 1.45; letter-spacing: -0.01em; }
+.vc-task.min .vc-task-q { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 0; }
+.vc-task.min .vc-task-acts { display: none; }
+.vc-task-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.vc-pill {
+  min-height: 42px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(0, 0, 0, 0.1); background: #fff; color: var(--vc-ink);
+  font: inherit; font-size: 14px; font-weight: 650; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  transition: transform 0.3s var(--vc-ease), background 0.2s;
+}
+.vc-pill:active { transform: scale(0.96); }
+.vc-pill.primary { background: linear-gradient(180deg, var(--vc-accent), var(--vc-accent-2)); color: #fff; border: 0; box-shadow: 0 6px 16px -8px rgba(194, 65, 61, 0.9); }
+.vc-pill .ic { width: 18px; height: 18px; }
+
+.vc-crosshair { position: fixed; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; color: #fff; z-index: 9; pointer-events: none; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.7)); }
+.vc-crosshair .ic { width: 46px; height: 46px; stroke-width: 1.3; }
+
+/* plan */
+.vc-plan {
+  position: absolute; left: calc(12px + var(--sal)); bottom: calc(14px + var(--sab)); width: min(46vw, 190px); aspect-ratio: 1;
+  border-radius: 18px; background: rgba(16, 16, 18, 0.72); box-shadow: var(--vc-shadow); overflow: hidden;
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); animation: vc-in 0.45s var(--vc-ease);
+}
+.vc-plan canvas { width: 100%; height: 100%; display: block; }
+
+.vc-gyro { position: absolute; right: calc(12px + var(--sar)); bottom: calc(14px + var(--sab)); }
+
+
+.vc-toast {
+  position: absolute; left: 50%; bottom: calc(70px + var(--sab)); transform: translate(-50%, 8px); opacity: 0; pointer-events: none; max-width: calc(100vw - 32px); text-overflow: ellipsis; overflow: hidden;
+  background: rgba(20, 20, 22, 0.86); color: #fff; font-size: 13px; font-weight: 600; padding: 9px 14px; border-radius: 999px; white-space: nowrap;
+  transition: opacity 0.3s var(--vc-ease), transform 0.4s var(--vc-ease);
+}
+.vc-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.vc-rotate { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12, 12, 14, 0.72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #fff; z-index: 3; }
+.vc-rotate > div { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 24px; }
+.vc-rotate .vc-rotate-ic { width: 64px; height: 64px; stroke-width: 1.2; animation: vc-turn 2.2s var(--vc-ease) infinite; margin-bottom: 8px; }
+.vc-rotate b { font-size: 19px; letter-spacing: -0.02em; }
+.vc-rotate span { font-size: 14px; opacity: 0.75; }
+.vc-rotate-ok { margin-top: 14px; border: 1px solid rgba(255, 255, 255, 0.3); background: none; color: #fff; font: inherit; font-size: 14px; font-weight: 600; border-radius: 999px; padding: 10px 18px; cursor: pointer; }
+@keyframes vc-turn { 0%, 20% { transform: rotate(0); } 55%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+
+.vc-hint {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; pointer-events: none; color: #fff; text-align: center;
+  font: 600 15px/1.5 "Pretendard Variable", Pretendard, system-ui, sans-serif; text-shadow: 0 1px 14px rgba(0, 0, 0, 0.75);
+  transition: opacity 0.6s var(--vc-ease);
+}
+.vc-hint.gone { opacity: 0; }
+
+/* phone on its side: slimmer bar, task card on the left, plan at the bottom right */
+@media (orientation: landscape) and (max-height: 520px) {
+  .vc-top { padding-top: calc(8px + var(--sat)); padding-bottom: 8px; }
+  .vc-btn { width: 38px; height: 38px; }
+  .vc-task-slot, .vc.has-dev .vc-task-slot { justify-content: flex-start; top: calc(56px + var(--sat)); right: auto; width: min(320px, 40vw); }
+  .vc-task { padding: 10px 12px 10px 14px; }
+  .vc-task-q { font-size: 14px; margin: 4px 0 8px; }
+  .vc-pill { min-height: 38px; font-size: 13px; padding: 0 13px; }
+  .vc-plan { left: auto; right: calc(12px + var(--sar)); bottom: calc(60px + var(--sab)); width: min(34vh, 170px); }
+}
+
+/* 3DGS viewer inside the app: its own tool UI gives way to the shared chrome */
+html.app-mode #brand, html.app-mode #tools, html.app-mode #strip, html.app-mode #stripToggle, html.app-mode #lamps,
+html.app-mode #minimap, html.app-mode #mood, html.app-mode #photos, html.app-mode #photoBox, html.app-mode #photoCompare { display: none !important; }
+html.app-mode #toast { top: auto; bottom: calc(70px + var(--sab)); }
+html.app-mode #streamPill { top: auto; bottom: calc(18px + var(--sab)); }
+html.app-mode .hint { top: 55%; }

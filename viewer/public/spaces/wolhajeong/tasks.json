@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "about": "두 조건(360° 시점 탐색 / 3DGS 자유 시점 탐색)에 똑같이 나오는 과제. type: goto(그 방까지 가서 '도착했어요'), point(목표 방향을 바라보고 '이 방향이에요' → 각도 오차 기록), choice(보기 고르기). start = 과제를 시작할 촬영 지점 id(없으면 지금 자리). target = nav.json의 방 id. 초안이니 연구자가 고칠 것.",
+  "tasks": [
+    {
+      "id": "T1",
+      "type": "goto",
+      "start": "g1",
+      "target": "sarang",
+      "prompt": "대문에서 출발해 별채 사랑방 앞까지 가 보세요."
+    },
+    {
+      "id": "T2",
+      "type": "point",
+      "start": "y2",
+      "target": "kitchen",
+      "prompt": "앞마당에서 부엌은 어느 방향인가요? 그쪽을 바라본 뒤 버튼을 눌러 주세요."
+    },
+    {
+      "id": "T3",
+      "type": "goto",
+      "target": "jeongja",
+      "prompt": "정자 옆 야외 테이블까지 가 보세요."
+    },
+    {
+      "id": "T4",
+      "type": "point",
+      "target": "gate",
+      "prompt": "지금 있는 곳에서 대문은 어느 쪽인가요? 그쪽을 바라본 뒤 버튼을 눌러 주세요."
+    },
+    {
+      "id": "T5",
+      "type": "choice",
+      "prompt": "대문에서 더 가까운 곳은 어디인가요?",
+      "options": [
+        "안채",
+        "별채 사랑방",
+        "비슷하다"
+      ],
+      "answer": "별채 사랑방"
+    }
+  ],
+  "study": {
+    "questionnaireUrl": "",
+    "plan": true,
+    "about": "questionnaireUrl: 조건마다 끝나고 열 설문 주소({pid}, {cond}가 참가자·조건으로 바뀜). plan: 두 조건에서 평면도 버튼을 보여 줄지."
+  }
+}

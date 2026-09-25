@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>공간 올리기 · SplatTour</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link rel="stylesheet" href="/src/home.css" />
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="back-home" href="/">← 숙소 목록</a>
+    <h1>공간 올리기</h1>
+    <p class="lede">촬영한 사진이나 영상을 올리면, 걸어 다니며 볼 수 있는 3D 공간 투어로 만들어 줍니다. <a class="manual-link" href="/manual.html">사용 설명서 →</a></p>
+  </header>
+
+  <h2>공간 올리기</h2>
+  <section class="card upload" id="uploadCard">
+    <div class="drop" id="drop">
+      <svg viewBox="0 0 48 48"><path d="M24 31V11m0 0-8 8m8-8 8 8M9 30v5a4 4 0 0 0 4 4h22a4 4 0 0 0 4-4v-5"/></svg>
+      <div class="big">촬영 파일을 여기에 끌어다 놓으세요</div>
+      <div class="small">폴더째 놓아도 됩니다 · 사진(jpg·heic) · 영상(mp4·mov)<br />수십 GB도 괜찮아요. 끊기면 같은 파일을 다시 고르면 이어서 올라갑니다</div>
+      <div class="files" id="files"></div>
+      <input type="file" id="picker" multiple hidden accept="video/*,image/*,.insv,.heic,.heif" />
+    </div>
+    <div class="form">
+      <label class="f">공간 이름<input type="text" id="title" placeholder="예: 북촌 한옥 사랑채" /></label>
+      <label class="f">품질
+        <select id="quality">
+          <option value="cloud">최고 품질 (원본 해상도, 약 20분)</option>
+          <option value="cloud-draft">빠른 확인 (약 10분)</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="pano" /> <span>360° 카메라로 찍었어요<small>인스타360 등으로 찍은 파노라마 영상·사진</small></span></label>
+      <label class="f">업로드 비밀번호<input type="password" id="pw" autocomplete="current-password" placeholder="전달받은 비밀번호" /></label>
+      <div class="note" id="uploadNote"></div>
+      <button class="primary" id="go" disabled>올리고 투어 만들기</button>
+    </div>
+  </section>
+  <section class="card up" id="up">
+    <div class="up-head"><div><b id="upTitle"></b> <span id="upState" class="note"></span></div><button id="upPause">일시정지</button></div>
+    <div class="up-bar"><i id="upBar"></i></div>
+    <div class="up-meta"><span id="upBytes"></span><span id="upSpeed"></span></div>
+  </section>
+
+  <div id="jobsWrap" hidden>
+    <h2>만드는 중</h2>
+    <div id="jobs"></div>
+  </div>
+
+  <h2>완성된 공간</h2>
+  <div class="scenes" id="scenes"><div class="empty">불러오는 중…</div></div>
+
+  <h2>촬영 요령</h2>
+  <div class="card guide">
+    <b>1. 노출·초점·색 잠그기.</b> 찍기 전에 한 번 맞추고 끝까지 바꾸지 않기(폰: 화면 길게 눌러 AE/AF 잠금, HDR·AI 보정 끄기). 사진마다 밝기가 바뀌면 벽에 얼룩이 생겨요.<br />
+    <b>2. 방마다 세 바퀴.</b> 가운데서 한 바퀴 → 벽 따라 한 바퀴(방 가운데를 향해) → 낮은 높이에서 한 번 더. 옆 사진과 70% 이상 겹치게, 1~2걸음마다 한 장.<br />
+    <b>3. 확대해서 볼 사물은 가까이.</b> 액자·책장·침대는 50~80cm 앞에서 옆으로 옮겨 가며 5~10장.<br />
+    <b>4. 문지방은 앞뒤로 두 번.</b> 방과 방이 이어지는 곳이 투어 동선의 핵심이에요.<br />
+    <b>5. 움직이는 것·거울 치우기.</b> 사람·커튼·선풍기 바람은 유령 얼룩이 되고, 거울은 가짜 방을 만들어요.
+  </div>
+</div>
+<script type="module" src="/src/home.js"></script>
+</body>
+</html>

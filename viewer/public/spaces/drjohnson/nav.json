@@ -1,0 +1,323 @@
+{
+ "version": 1,
+ "about": "촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도).",
+ "status": {
+  "ready": true,
+  "devPlaceholder": true,
+  "note": "개발용: 파노라마를 3DGS 장면에서 렌더링했다(scripts/bake-dev-panos.mjs). 360 뷰어 동작 확인용일 뿐, 실험의 360 조건에는 절대 쓰지 않는다(실제 360 촬영본만 가능)."
+ },
+ "transition": {
+  "style": "warp",
+  "duration": 0.8
+ },
+ "range": {
+  "radius": 2.2
+ },
+ "start": "n0",
+ "rooms": [
+  {
+   "id": "parlour",
+   "name": "응접실"
+  },
+  {
+   "id": "dining",
+   "name": "식당"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "n0",
+   "room": "parlour",
+   "position": [
+    -0.8829,
+    1.45,
+    0.3221
+   ],
+   "imageYawDeg": 23.4,
+   "pano": "pano-dev/n0.jpg",
+   "neighbors": [
+    "n1",
+    "n14",
+    "n15"
+   ]
+  },
+  {
+   "id": "n1",
+   "room": "parlour",
+   "position": [
+    -2.3957,
+    1.45,
+    -0.1513
+   ],
+   "imageYawDeg": -59.4,
+   "pano": "pano-dev/n1.jpg",
+   "neighbors": [
+    "n0",
+    "n15",
+    "n16",
+    "n2"
+   ]
+  },
+  {
+   "id": "n2",
+   "room": "parlour",
+   "position": [
+    -2.2181,
+    1.45,
+    -1.5572
+   ],
+   "imageYawDeg": -151.1,
+   "pano": "pano-dev/n2.jpg",
+   "neighbors": [
+    "n1",
+    "n16",
+    "n17",
+    "n3"
+   ]
+  },
+  {
+   "id": "n3",
+   "room": "parlour",
+   "position": [
+    0.4316,
+    1.45,
+    -2.7892
+   ],
+   "imageYawDeg": -144.1,
+   "pano": "pano-dev/n3.jpg",
+   "neighbors": [
+    "n10",
+    "n2",
+    "n4",
+    "n9"
+   ]
+  },
+  {
+   "id": "n4",
+   "room": "dining",
+   "position": [
+    1.5769,
+    1.45,
+    -3.5065
+   ],
+   "imageYawDeg": -146.2,
+   "pano": "pano-dev/n4.jpg",
+   "neighbors": [
+    "n11",
+    "n3",
+    "n5",
+    "n9"
+   ]
+  },
+  {
+   "id": "n5",
+   "room": "dining",
+   "position": [
+    3.3244,
+    1.45,
+    -4.7284
+   ],
+   "imageYawDeg": -146.3,
+   "pano": "pano-dev/n5.jpg",
+   "neighbors": [
+    "n12",
+    "n4",
+    "n6"
+   ]
+  },
+  {
+   "id": "n6",
+   "room": "dining",
+   "position": [
+    5.0365,
+    1.45,
+    -4.4862
+   ],
+   "imageYawDeg": 116,
+   "pano": "pano-dev/n6.jpg",
+   "neighbors": [
+    "n12",
+    "n5",
+    "n7"
+   ]
+  },
+  {
+   "id": "n7",
+   "room": "dining",
+   "position": [
+    4.6431,
+    1.45,
+    -2.9161
+   ],
+   "imageYawDeg": 33.1,
+   "pano": "pano-dev/n7.jpg",
+   "neighbors": [
+    "n13",
+    "n6",
+    "n8"
+   ]
+  },
+  {
+   "id": "n8",
+   "room": "dining",
+   "position": [
+    3.3625,
+    1.45,
+    -2.0026
+   ],
+   "imageYawDeg": -55.9,
+   "pano": "pano-dev/n8.jpg",
+   "neighbors": [
+    "n11",
+    "n7",
+    "n9"
+   ]
+  },
+  {
+   "id": "n9",
+   "room": "dining",
+   "position": [
+    1.672,
+    1.45,
+    -1.8083
+   ],
+   "imageYawDeg": 34.2,
+   "pano": "pano-dev/n9.jpg",
+   "neighbors": [
+    "n10",
+    "n3",
+    "n4",
+    "n8"
+   ]
+  },
+  {
+   "id": "n10",
+   "room": "parlour",
+   "position": [
+    -0.5196,
+    1.45,
+    -1.3296
+   ],
+   "imageYawDeg": 122,
+   "pano": "pano-dev/n10.jpg",
+   "neighbors": [
+    "n14",
+    "n17",
+    "n3",
+    "n9"
+   ]
+  },
+  {
+   "id": "n11",
+   "room": "dining",
+   "position": [
+    2.9995,
+    1.45,
+    -3.3869
+   ],
+   "imageYawDeg": -170.6,
+   "pano": "pano-dev/n11.jpg",
+   "neighbors": [
+    "n4",
+    "n8"
+   ]
+  },
+  {
+   "id": "n12",
+   "room": "dining",
+   "position": [
+    4.1565,
+    1.45,
+    -6.108
+   ],
+   "imageYawDeg": -73,
+   "pano": "pano-dev/n12.jpg",
+   "neighbors": [
+    "n13",
+    "n5",
+    "n6"
+   ]
+  },
+  {
+   "id": "n13",
+   "room": "dining",
+   "position": [
+    5.9486,
+    1.45,
+    -2.8562
+   ],
+   "imageYawDeg": 65.6,
+   "pano": "pano-dev/n13.jpg",
+   "neighbors": [
+    "n12",
+    "n7"
+   ]
+  },
+  {
+   "id": "n14",
+   "room": "parlour",
+   "position": [
+    0.1604,
+    1.45,
+    -0.2826
+   ],
+   "imageYawDeg": 85.5,
+   "pano": "pano-dev/n14.jpg",
+   "neighbors": [
+    "n0",
+    "n10",
+    "n15"
+   ]
+  },
+  {
+   "id": "n15",
+   "room": "parlour",
+   "position": [
+    -2.2243,
+    1.45,
+    1.309
+   ],
+   "imageYawDeg": -15.1,
+   "pano": "pano-dev/n15.jpg",
+   "neighbors": [
+    "n0",
+    "n1",
+    "n14",
+    "n16"
+   ]
+  },
+  {
+   "id": "n16",
+   "room": "parlour",
+   "position": [
+    -3.7442,
+    1.45,
+    -1.1923
+   ],
+   "imageYawDeg": -113.2,
+   "pano": "pano-dev/n16.jpg",
+   "neighbors": [
+    "n1",
+    "n15",
+    "n17",
+    "n2"
+   ]
+  },
+  {
+   "id": "n17",
+   "room": "parlour",
+   "position": [
+    -1.2434,
+    1.45,
+    -2.5461
+   ],
+   "imageYawDeg": 172.4,
+   "pano": "pano-dev/n17.jpg",
+   "neighbors": [
+    "n10",
+    "n16",
+    "n2"
+   ]
+  }
+ ]
+}

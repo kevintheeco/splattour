@@ -1,0 +1,4 @@
+{
+  "note": "숙소 목록. 순서대로 홈에 보인다. 각 숙소의 글·사진·방 구성은 <id>/listing.json, 촬영 지점(360·3DGS 공통)은 <id>/nav.json, 과제는 <id>/tasks.json에서 고친다.",
+  "spaces": ["wolhajeong", "drjohnson"]
+}

@@ -1,0 +1,30 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0c0c0d; color: #f5f3ef; overflow: hidden; font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+#app { position: fixed; inset: 0; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+
+.pv-label {
+  position: absolute; left: 0; top: 0; pointer-events: auto; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;
+  padding: 6px 8px 6px 12px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.94); color: #1f1d1a;
+  font: 650 13px/1 "Pretendard Variable", Pretendard, system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 20px -8px rgba(0, 0, 0, 0.5);
+}
+.pv-label .ic { width: 15px; height: 15px; }
+
+#loader { position: absolute; inset: 0; display: grid; place-items: center; background: #0c0c0d; z-index: 20; transition: opacity 0.5s cubic-bezier(0.32, 0.72, 0, 1); }
+#loader.done { opacity: 0; pointer-events: none; }
+.loader-card { text-align: center; }
+.loader-title { font-size: 15px; font-weight: 650; }
+.loader-sub { font-size: 12px; opacity: 0.6; margin-top: 6px; }
+
+.pv-pending { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; z-index: 30;
+  background: radial-gradient(120% 80% at 50% 0%, #2a2f3a 0%, #121214 60%); }
+.pv-pending-back { position: absolute; left: calc(12px + env(safe-area-inset-left)); top: calc(10px + env(safe-area-inset-top)); }
+.pv-pending-card { max-width: 360px; text-align: center; }
+.pv-pending-ic { width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 22px; display: grid; place-items: center; background: rgba(255, 255, 255, 0.08); color: #ffd466; }
+.pv-pending-ic .ic { width: 36px; height: 36px; stroke-width: 1.3; }
+.pv-pending-eyebrow { font-size: 12px; font-weight: 600; opacity: 0.6; }
+.pv-pending h1 { font-size: 22px; letter-spacing: -0.03em; margin: 8px 0 10px; line-height: 1.35; }
+.pv-pending p { font-size: 14px; line-height: 1.6; opacity: 0.75; margin: 0 0 22px; }
+.pv-pending-btn { display: inline-flex; height: 46px; align-items: center; padding: 0 22px; border-radius: 999px; background: #fff; color: #1f1d1a; font-weight: 700; font-size: 15px; text-decoration: none; }

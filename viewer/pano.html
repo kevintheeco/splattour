@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0c0c0d" />
+    <title>360° 시점 탐색</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+    <link rel="stylesheet" href="/src/app/pano.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view"></canvas>
+      <div id="labels"></div>
+      <div id="loader">
+        <div class="loader-card">
+          <div class="loader-title" id="loaderTitle">360° 촬영본을 불러오는 중</div>
+          <div class="loader-sub" id="loaderSub"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/app/pano360.js"></script>
+  </body>
+</html>

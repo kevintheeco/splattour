@@ -11,6 +11,7 @@ let cfg = { uploads: false, storage: "" };
 // Published site: home is "/", the viewer is /tour.html (old "/?scene=" links are forwarded).
 const TOUR = import.meta.env.PROD ? "/tour.html" : "/";
 if (new URLSearchParams(location.search).has("scene")) location.replace(TOUR + location.search);
+document.querySelector(".back-home")?.setAttribute("href", import.meta.env.PROD ? "/" : "/home.html");
 let picked = [];
 let uploading = null;
 

@@ -5,6 +5,8 @@
 //
 //   /?scene=hanok&mode=pano&onboarding=0&study=P03[&task=T1][&badge=0]
 
+import { createStudyLog, studyBadge, summarizeApp } from "./app/studylog.js";
+
 export function summarize(events) {
   const moves = events.filter((e) => e.e === "depart");
   const arrives = events.filter((e) => e.e === "arrive");
@@ -33,21 +35,16 @@ export function summarize(events) {
 }
 
 export function start({ nav, look, rig, params, canvas, getMode, tour }) {
-  const pid = (params.get("study") || "anon").replace(/[^\w-]/g, "").slice(0, 40) || "anon";
-  const session = `${pid}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-  const t0 = performance.now();
-  const all = [];
-  let queue = [];
-  const log = (e, data = {}) => {
-    const rec = { t: Math.round(performance.now() - t0), e, ...data };
-    all.push(rec);
-    queue.push(rec);
-  };
-  log("start", {
-    pid, session, scene: params.get("scene"), mode: getMode(), task: params.get("task") || "",
-    ua: navigator.userAgent, screen: [innerWidth, innerHeight, devicePixelRatio], speed: nav.speed,
-    vignette: params.get("vignette") !== "0", onboarding: params.get("onboarding") ?? "",
+  // transport, session id and local backup are shared with the 360° viewer (app/studylog.js)
+  const S = createStudyLog({
+    pid: params.get("study"),
+    meta: {
+      scene: params.get("scene"), mode: getMode(), task: params.get("task") || "", speed: nav.speed,
+      vignette: params.get("vignette") !== "0", onboarding: params.get("onboarding") ?? "",
+      app: params.get("app") === "1", space: params.get("space") || "", cond: params.get("app") === "1" ? "splat" : "", seq: params.get("seq") || "",
+    },
   });
+  const { log, all, pid } = S;
 
   // the viewer jumps to the start node before this module loads: record it as the first arrival
   if (nav.current) log("arrive", { node: nav.current.id }); // already at a viewpoint
@@ -66,40 +63,15 @@ export function start({ nav, look, rig, params, canvas, getMode, tour }) {
     if (m !== lastMode) { log("mode", { mode: m }); lastMode = m; }
   }, 250);
 
-  const flush = (beacon = false) => {
-    if (!queue.length) return;
-    const body = JSON.stringify({ session, events: queue });
-    queue = [];
-    const url = `/api/study/${encodeURIComponent(pid)}`;
-    try {
-      if (beacon && navigator.sendBeacon) navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
-      else fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
-    } catch {}
-  };
-  setInterval(flush, 5000);
-  addEventListener("pagehide", () => { log("end", { summary: summarize(all) }); flush(true); });
+  const full = () => ({ ...summarize(all), app: summarizeApp(all) });
+  addEventListener("pagehide", () => { log("end", { summary: full() }); S.flush(true); });
 
   // researcher badge (hide with &badge=0): participant id, live counters, download
   if (params.get("badge") !== "0") {
-    const b = document.createElement("div");
-    b.style.cssText = "position:absolute;left:16px;bottom:120px;z-index:5;font:600 12px/1.4 Pretendard,system-ui,sans-serif;color:#fff;background:rgba(160,30,40,.78);padding:6px 10px;border-radius:10px;display:flex;gap:10px;align-items:center";
-    const txt = document.createElement("span");
-    const dl = document.createElement("button");
-    dl.textContent = "기록 받기";
-    dl.style.cssText = "font:inherit;color:#fff;background:rgba(255,255,255,.18);border:0;border-radius:6px;padding:2px 8px;cursor:pointer";
-    dl.onclick = () => {
-      const blob = new Blob([JSON.stringify({ session, summary: summarize(all), events: all }, null, 1)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${session}.json`;
-      a.click();
-    };
-    b.append(txt, dl);
-    document.body.appendChild(b);
-    setInterval(() => {
+    studyBadge(() => {
       const s = summarize(all);
-      txt.textContent = `실험 기록 중 · ${pid} · ${getMode() === "pano" ? "파노라마" : "3D"} · 이동 ${s.moves} · ${Math.round(s.durationSec)}초`;
-    }, 1000);
+      return `실험 기록 중 · ${pid} · ${getMode() === "pano" ? "파노라마" : "3D"} · 이동 ${s.moves} · ${Math.round(s.durationSec)}초`;
+    }, () => S.download(full()));
   }
-  return { log, summarize: () => summarize(all), stop: () => { clearInterval(poseTimer); flush(true); } };
+  return { log, all, flush: S.flush, summarize: () => summarize(all), stop: () => { clearInterval(poseTimer); S.stop(); } };
 }

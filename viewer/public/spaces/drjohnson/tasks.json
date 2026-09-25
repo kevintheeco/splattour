@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "about": "기능 확인용 과제 (Dr Johnson's House).",
+  "tasks": [
+    {
+      "id": "T1",
+      "type": "goto",
+      "start": "n0",
+      "target": "dining",
+      "prompt": "응접실에서 출발해 식당까지 가 보세요."
+    },
+    {
+      "id": "T2",
+      "type": "point",
+      "target": "parlour",
+      "prompt": "응접실은 어느 방향인가요? 그쪽을 바라본 뒤 버튼을 눌러 주세요."
+    },
+    {
+      "id": "T3",
+      "type": "choice",
+      "prompt": "식당 가운데에 있는 탁자는 어떤 모양인가요?",
+      "options": [
+        "둥근 탁자",
+        "네모난 탁자",
+        "탁자가 없다"
+      ],
+      "answer": "둥근 탁자"
+    }
+  ],
+  "study": {
+    "questionnaireUrl": "",
+    "plan": true,
+    "about": "questionnaireUrl: 조건마다 끝나고 열 설문 주소({pid}, {cond}가 참가자·조건으로 바뀜). plan: 두 조건에서 평면도 버튼을 보여 줄지."
+  }
+}

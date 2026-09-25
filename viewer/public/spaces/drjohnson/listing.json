@@ -1,0 +1,41 @@
+{
+  "id": "drjohnson",
+  "title": "Dr Johnson's House",
+  "tagline": "18세기 런던 타운하우스의 두 방",
+  "type": "시험용 공간",
+  "area": "영국 런던 · Gough Square",
+  "address": "17 Gough Square, London",
+  "transit": "공개 3DGS 데이터셋(Deep Blending) 사진 263장",
+  "facts": ["방 2", "촬영 지점 18곳", "사진 263장"],
+  "badges": ["기능 확인용"],
+  "cover": "photos/d6295.webp",
+  "hero": ["d6295", "d6311", "d6355", "d6377", "d6346", "d6565", "d6533", "d6569"],
+  "highlights": [
+    { "icon": "cube", "title": "3DGS 확인용 장면", "text": "월하정 3D가 준비되기 전, 3DGS 자유 시점 탐색이 휴대폰에서 어떻게 보이는지 확인하는 공간이에요." },
+    { "icon": "door", "title": "접이문으로 이어진 두 방", "text": "응접실과 식당이 커다란 접이문으로 이어져 있어요." }
+  ],
+  "description": [
+    "새뮤얼 존슨이 영어 사전을 엮은 런던의 18세기 타운하우스입니다. 연녹색 판벽, 벽난로, 오래된 책장과 판화가 걸린 두 방을 사진으로 복원했어요.",
+    "연구의 실제 대상 공간(월하정)이 아니라 기능을 시험하는 공간입니다. 360° 파노라마도 3DGS에서 렌더링한 개발용이라 실험에는 쓰지 않아요."
+  ],
+  "rooms": [
+    { "name": "응접실", "detail": "벽난로 · 책장 겸 책상", "icon": "sofa", "photo": "d6569" },
+    { "name": "식당", "detail": "원형 식탁 · 판화 벽", "icon": "kitchen", "photo": "d6355" }
+  ],
+  "photoTour": [
+    { "room": "응접실", "photos": ["d6295", "d6311", "d6319", "d6377", "d6565", "d6567", "d6569"] },
+    { "room": "접이문", "photos": ["d6329"] },
+    { "room": "식당", "photos": ["d6337", "d6346", "d6355", "d6361", "d6533", "d6553"] }
+  ],
+  "amenities": [
+    { "icon": "fire", "label": "벽난로" },
+    { "icon": "book", "label": "책장" },
+    { "icon": "door", "label": "접이문" },
+    { "icon": "frame", "label": "판화·초상화" }
+  ],
+  "rules": [
+    { "icon": "info", "label": "공개 데이터셋 장면 · 연구 기능 확인용" }
+  ],
+  "explore": { "nav": "nav.json", "tasks": "tasks.json", "scene": "drjohnson" },
+  "credit": "사진: Deep Blending 데이터셋(Hedman et al. 2018) 원본 사진"
+}
