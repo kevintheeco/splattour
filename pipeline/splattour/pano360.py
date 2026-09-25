@@ -222,7 +222,15 @@ def classify(recs: list[dict]) -> dict:
         try:
             return datetime.fromisoformat((r.get("creation_time") or "").replace("Z", "+00:00")).timestamp()
         except ValueError:
-            return None
+            pass
+        # no creation_time (re-muxed files): Insta360-style names carry the recording start, CAM_20260818050812_0007_D.mp4
+        m = re.search(r"(20\d{12})", r.get("name") or "")
+        if m:
+            try:
+                return datetime.strptime(m.group(1), "%Y%m%d%H%M%S").timestamp()
+            except ValueError:
+                return None
+        return None
     rig_votes = 0
     for i in range(len(vids)):
         for j in range(i + 1, len(vids)):
@@ -234,7 +242,9 @@ def classify(recs: list[dict]) -> dict:
             au = audio_offset(Path(a["file"]), Path(b["file"])) if a.get("audio") and b.get("audio") else {"ok": False}
             synced = au.get("ok") and au.get("peak_ratio", 0) >= 4
             same_len = abs(a["duration"] - b["duration"]) < 0.1 * max(a["duration"], b["duration"])
-            vote = bool(synced or (overlap is not None and overlap > 0.5 * min(a["duration"], b["duration"])))
+            # recording times that do not overlap overrule a sound match (2026-09-26: four 월하정 clips recorded minutes
+            # apart matched each other's sound with peak_ratio 8-19 -> wrongly called a rig)
+            vote = bool((synced and (overlap is None or overlap > 0)) or (overlap is not None and overlap > 0.5 * min(a["duration"], b["duration"])))
             rig_votes += vote
             res["pairs"].append({"a": a["name"], "b": b["name"], "time_overlap_s": None if overlap is None else round(overlap, 1),
                                  "similar_length": same_len, "audio": au, "same_time": vote})
@@ -358,11 +368,26 @@ def extract_selected(rec: dict, clip: int, sc: dict, idx: list[int], out: Path, 
 
 
 def frames_from_inputs(inputs: list[Path], out: Path, n_frames: int, fps: float, fov: float, width: int | None,
-                       max_seconds: float | None = None, pr: dict | None = None, start: float = 0.0) -> dict:
-    """probe -> per clip: score -> select -> extract. Frames per clip in proportion to distance moved."""
+                       max_seconds: float | None = None, pr: dict | None = None, start: float = 0.0, dense: dict | None = None,
+                       labels: dict | None = None, exclude: list[str] | None = None) -> dict:
+    """probe -> per clip: score -> select -> extract. Frames per clip in proportion to distance moved.
+    dense = {"prior": {...}, "spacing": m, "rot_deg": deg}: every frame scored, sharpest per ~spacing m of travel
+    (pano360_dense). exclude = clip file names left out (clip numbers stay those of the full file order)."""
     pr = pr or probe(inputs)
     clips = [r for r in pr["files"] if r.get("layout") in ("equirect", "dual-fisheye", "dual-stream-fisheye", "insv-lens-00")]
+    order = (dense or {}).get("clip_order")  # clip numbers of the FULL file list (labels refer to them) when some files are absent
+    for i, r in enumerate(clips):
+        r["clip_index"] = order.index(r["name"]) if order and r["name"] in order else i
+    if exclude:
+        clips_all = clips
+        clips = [r for r in clips if r["name"] not in set(exclude)]
+        log(f"left out: {[r['name'] for r in clips_all if r not in clips]}")
     stills = [r for r in pr["files"] if Path(r["file"]).suffix.lower() in IMAGE_EXT and r.get("layout") == "equirect"]
+    if dense is not None and not stills and all(r.get("layout") == "equirect" for r in clips):
+        from .pano360_dense import select_all
+        sel = select_all(clips, out, dense.get("prior"), n_frames, labels, fov, extract_selected,
+                         spacing0=dense.get("spacing", 0.3), rot0=dense.get("rot_deg", 20.0), workers=len(clips))
+        return {"clips": sel["clips"], "frames": sel["frames"], "probe": pr, "dense": {"spacing_m": sel["spacing_m"]}}
     frames: list[dict] = []
     scores = {}
     for c, rec in enumerate(clips):
@@ -672,8 +697,10 @@ import imageio.v2 as imageio
 MASKS = os.environ.get("PANO360_MASKS", "")
 DROP = set(json.load(open(os.environ["PANO360_DROP"]))) if os.environ.get("PANO360_DROP") and os.path.exists(os.environ["PANO360_DROP"]) else set()
 _init, _get = C.Dataset.__init__, C.Dataset.__getitem__
+DS = {}
 def init(self, parser, split="train", *a, **k):
     _init(self, parser, split, *a, **k)
+    DS[split] = self
     if split == "train" and DROP:
         keep = [i for i in self.indices if parser.image_names[i] not in DROP]
         print(f"[pano360] training on {len(keep)} of {len(self.indices)} views (mostly-person views left out)", flush=True)
@@ -692,6 +719,9 @@ def get(self, item):
             data["image"] = data["image"] * m[..., None]
     return data
 C.Dataset.__init__, C.Dataset.__getitem__ = init, get
+if os.environ.get("PANO360_FIG_DIR"):  # training-process figures (pano360_trainfig.py, copied next to this file)
+    import pano360_trainfig
+    pano360_trainfig.install(DS, sys.argv[1:])
 sys.argv = ["simple_trainer.py"] + sys.argv[1:]
 runpy.run_path("simple_trainer.py", run_name="__main__")
 '''
@@ -713,11 +743,14 @@ def train_masked(dataset: Path, out: Path, steps: int, cap_max: int, test_every:
         raise RuntimeError("gsplat setup failed: " + (setup.stderr or setup.stdout)[-600:])
     ex = workdir / "gsplat" / "examples"
     (ex / "pano360_train.py").write_text(TRAIN_WRAPPER, encoding="utf-8")
+    shutil.copyfile(Path(__file__).with_name("pano360_trainfig.py"), ex / "pano360_trainfig.py")
     help_text = sp.run(["python", "simple_trainer.py", "mcmc", "--help"], cwd=ex, capture_output=True, text=True).stdout
     extra = [f for f in (extra or []) if _flag(help_text, f.partition("=")[0]) in help_text]
     args = local_trainer_args(help_text, dataset, out, steps, cap_max, test_every, steps_scaler, extra)
     args[1] = "pano360_train.py"
-    env = {**os.environ, "PANO360_MASKS": str(dataset / "masks"), "PANO360_DROP": str(dataset / "drop.json")}
+    # expandable segments: the first 월하정 run died of fragmentation (OOM at step 22100 on a 24 GB card, 3.8 GB reserved-unused)
+    env = {**os.environ, "PANO360_MASKS": str(dataset / "masks"), "PANO360_DROP": str(dataset / "drop.json"),
+           "PYTORCH_CUDA_ALLOC_CONF": os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")}
     t1 = time.time()
     last = 0
     with open(out / "train.log", "w", encoding="utf-8") as logf:
@@ -748,12 +781,12 @@ def train_masked(dataset: Path, out: Path, steps: int, cap_max: int, test_every:
 
 # =========================================================================== rig SfM (pycolmap)
 def rig_sfm(views_dir: Path, masks_dir: Path, work: Path, rig: dict, matcher: str = "sequential", mapper: str = "global",
-            max_image_size: int = 1600, views_hi: Path | None = None) -> dict:
+            max_image_size: int = 1600, views_hi: Path | None = None, pairs: Path | None = None) -> dict:
     """Runs in the SfM python (pycolmap 4; on the GPU server the isolated venv, SPLATTOUR_SFM_PYTHON)."""
     work.mkdir(parents=True, exist_ok=True)
     spec = work / "rig_spec.json"
     spec.write_text(json.dumps({"views": str(views_dir), "views_hi": str(views_hi or views_dir), "masks": str(masks_dir), "work": str(work),
-                                "rig": rig, "matcher": matcher,
+                                "rig": rig, "matcher": matcher, "pairs": str(pairs) if pairs else None,
                                 "mapper": mapper, "max_image_size": max_image_size}))
     py = os.environ.get("SPLATTOUR_SFM_PYTHON") or sys.executable
     env = {**os.environ}
@@ -842,6 +875,12 @@ def _sfm_main(spec_path: str) -> None:
             po.loop_detection = True
             po.vocab_tree_path = vocab
         pycolmap.match_sequential(db, pairing_options=po, matching_options=mo)
+    if sp.get("pairs"):  # cross-clip / loop pairs from an earlier SfM of the same video (pano360_dense.prior_pairs)
+        t1 = time.time()
+        ip = pycolmap.ImportedPairingOptions()
+        ip.match_list_path = sp["pairs"]
+        pycolmap.match_image_pairs(db, matching_options=mo, pairing_options=ip)
+        t["prior_pairs"] = time.time() - t1
     t["matching"] = time.time() - t0
     t0 = time.time()
     sparse = work / "sparse"
@@ -1140,8 +1179,10 @@ def apply_space(nav_dir: Path, space: str) -> dict:
 def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float = 3.0, fov: float = 200.0, pano_width: int | None = None,
             max_seconds: float | None = None, matcher: str = "sequential", mapper: str = "global", sfm_side: int = 1600,
             spacing: float = 1.2, camera_height: float = 1.6, labels: dict | None = None, pano_clip: int | None = None,
-            nav_pano_width: int | None = None, workers: int = 4, person: bool = True, start: float = 0.0) -> dict:
-    """probe -> frames -> views -> person masks -> rig SfM -> dataset. Resumable."""
+            nav_pano_width: int | None = None, workers: int = 4, person: bool = True, start: float = 0.0, dense: dict | None = None,
+            exclude: list[str] | None = None, mask_refine: bool = False) -> dict:
+    """probe -> frames -> views -> person masks -> rig SfM -> dataset. Resumable.
+    dense: pano360_dense selection (+ prior image pairs for SfM); mask_refine: hull + temporal union of the person masks."""
     work.mkdir(parents=True, exist_ok=True)
     st_p = work / "pano360.json"
     st = json.loads(st_p.read_text(encoding="utf-8")) if st_p.exists() else {}
@@ -1150,7 +1191,8 @@ def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float =
         st_p.write_text(json.dumps(st, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     if "frames" not in st:
         t = time.time()
-        fr = frames_from_inputs(inputs, work / "equirect", n_frames, fps, fov, pano_width, max_seconds, start=start)
+        fr = frames_from_inputs(inputs, work / "equirect", n_frames, fps, fov, pano_width, max_seconds, start=start, dense=dense,
+                                labels=labels, exclude=exclude)
         st.update(probe=fr.pop("probe"), frames=fr, t_frames=round(time.time() - t))
         save()
         log(f"{len(fr['frames'])} panoramas in {st['t_frames']}s")
@@ -1164,6 +1206,12 @@ def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float =
         log(f"{st['views']['images']} views {st['views']['camera']['width']}x{st['views']['camera']['height']} in {st['t_views']}s")
     if "person" not in st and person:
         st["person"] = person_masks(work / "views_sfm", work / "masks", work / "person", equirect=work / "equirect")
+        if mask_refine:
+            from .pano360_dense import refine_person_masks
+            t = time.time()
+            st["person"]["refine"] = refine_person_masks(work / "person", st["frames"]["frames"], len(VIEWS), union=1)
+            st["person"]["refine"]["seconds"] = round(time.time() - t)
+            log("person masks refined", st["person"]["refine"])
         save()
         log("person masks", st["person"])
     if "sfm" not in st:
@@ -1173,8 +1221,16 @@ def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float =
             m = "exhaustive" if len(names) <= 120 else m
             log("several clips and no vocabulary tree: clips are linked only where file order puts them next to each other"
                 if m == "sequential" else "several clips, small set: exhaustive matching")
+        pairs = None
+        if dense and dense.get("prior"):
+            from .pano360_dense import prior_pairs
+            (work / "sfm").mkdir(parents=True, exist_ok=True)
+            st["prior_pairs"] = prior_pairs(st["frames"]["frames"], dense["prior"], VIEWS, work / "sfm" / "prior_pairs.txt")
+            log("prior pairs", st["prior_pairs"])
+            pairs = work / "sfm" / "prior_pairs.txt" if st["prior_pairs"].get("pairs") else None
+            save()
         st["sfm"] = rig_sfm(work / "views_sfm", work / "masks", work / "sfm", st["views"], matcher=m, mapper=mapper, max_image_size=sfm_side,
-                            views_hi=work / "views")
+                            views_hi=work / "views", pairs=pairs)
         if st.get("person"):
             st["sfm"]["training_masks"] = training_masks(Path(st["sfm"]["dataset"]), work / "person")
         save()
@@ -1182,6 +1238,35 @@ def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float =
     st["frames_n"] = len(names)
     save()
     return st
+
+
+def pipeline_figure_assets(work: Path, st: dict, out: Path, want: dict) -> dict:
+    """One frame through the pipeline, for the thesis figure: equirect (3840 wide), its 12 perspective views,
+    their person masks and SfM feature masks (half size), written to out/. want = {"clip": 1, "t": 182}."""
+    import cv2
+    out.mkdir(parents=True, exist_ok=True)
+    frs = [f for f in st["frames"]["frames"] if f["clip"] == want.get("clip", f["clip"]) and f.get("t") is not None]
+    if not frs:
+        return {}
+    fr = min(frs, key=lambda f: abs(f["t"] - float(want.get("t", 0))))
+    nm = fr["name"]
+    eq = _imread(work / "equirect" / nm)
+    if eq is not None:
+        _imwrite(out / "1_equirect.jpg", cv2.resize(eq, (3840, 1920), interpolation=cv2.INTER_AREA), [cv2.IMWRITE_JPEG_QUALITY, 92])
+    for i in range(len(VIEWS)):
+        v = _imread(work / "views" / f"pano_camera{i}" / nm)
+        if v is not None:
+            _imwrite(out / f"2_view{i:02d}.jpg", cv2.resize(v, (v.shape[1] // 2, v.shape[0] // 2), interpolation=cv2.INTER_AREA), [cv2.IMWRITE_JPEG_QUALITY, 90])
+        for src, tag in ((work / "person" / f"pano_camera{i}" / f"{nm}.png", "3_person"), (work / "masks" / f"pano_camera{i}" / f"{nm}.png", "3_sfmmask")):
+            m = _imread(src, cv2.IMREAD_GRAYSCALE)
+            if m is not None:
+                _imwrite(out / f"{tag}{i:02d}.png", m)
+    pm = work / "person" / "equirect" / f"{nm}.png"
+    if pm.exists():
+        shutil.copyfile(pm, out / "3_person_equirect_down.png")
+    info = {"frame": nm, "clip": fr["clip"], "t": fr["t"], "views": VIEWS}
+    (out / "frame.json").write_text(json.dumps(info))
+    return info
 
 
 def nav_stage(work: Path, scene_dir: Path | None, *, spacing: float, camera_height: float, labels: dict | None, pano_clip: int | None,
@@ -1320,16 +1405,19 @@ def upload_raw(s3, files: list[Path], name: str) -> list[dict]:
     return out
 
 
-def launch(name: str, files: list[dict], opts: dict, hours: float, dry_run: bool = False) -> dict:
+def launch(name: str, files: list[dict], opts: dict, hours: float, dry_run: bool = False, gpus: list[str] | None = None) -> dict:
     from .cloud import IMAGE, RunPod, runner_env
     from .inbox import BUCKET
     from .maxq import _kv, spend_this_month
     s3 = _s3()
     gb = sum(int(f.get("size") or 0) for f in files) / 1e9
     est = estimate(opts["n_frames"], opts.get("pano_w_guess") or 5760, opts["steps"], opts["cap"], gb)
+    if gpus:
+        est["usd_rate"] = max(PRICE.get(g, 1.2) for g in gpus)
+        est["usd"] = round(est["total_h"] * est["usd_rate"], 2)
     spend = spend_this_month(s3)
     plan = {"name": name, "files": len(files), "raw_gb": round(gb, 2), "estimate": est, "spend": spend, "opts": opts, "hours_cap": hours,
-            "worst_case_usd": round(hours * max(PRICE.values()), 2)}
+            "worst_case_usd": round(math.ceil(hours) * max(PRICE.get(g, 1.2) for g in (gpus or GPUS)), 2)}
     try:
         plan["runpod"] = balance()
     except Exception as e:  # noqa: BLE001
@@ -1354,7 +1442,7 @@ def launch(name: str, files: list[dict], opts: dict, hours: float, dry_run: bool
                 "PANO360_NAME": name, "COST_PER_HR": str(max(PRICE.values())), "SPLATTOUR_NO_WHEEL_BUILD": "1"})
     cmd = ('mkdir -p /workspace/st && curl -fsSL "$BUNDLE_URL" | tar xz -C /workspace/st && '
            '(bash /start.sh >/dev/null 2>&1 &) ; bash /workspace/st/runner/boot360.sh')
-    body = {"name": f"pano360-{name}"[:40], "imageName": IMAGE, "gpuTypeIds": GPUS, "gpuTypePriority": "custom", "gpuCount": 1,
+    body = {"name": f"pano360-{name}"[:40], "imageName": IMAGE, "gpuTypeIds": gpus or GPUS, "gpuTypePriority": "custom", "gpuCount": 1,
             "containerDiskInGb": int(min(1000, max(200, gb * 4 + 150))), "volumeInGb": 0, "ports": ["22/tcp"], "supportPublicIp": True,
             "cloudType": "SECURE", "env": {"PUBLIC_KEY": (SECRETS / "splattour_ed25519.pub").read_text().strip(), **env},
             "dockerStartCmd": ["bash", "-c", cmd]}
@@ -1390,15 +1478,29 @@ def remote() -> None:
         media.mkdir(parents=True, exist_ok=True)
         put(label="downloading")
         from boto3.s3.transfer import TransferConfig
-        cfg = TransferConfig(multipart_chunksize=64 << 20, max_concurrency=16)
-        for f in man["files"]:
-            dst = media / f["name"]
-            if not (dst.exists() and dst.stat().st_size == f["size"]):
-                s3.download_file(BUCKET, f["key"], str(dst), Config=cfg)
+        # the bucket is in APAC and GPU hosts are mostly in the US/EU: one connection gets ~0.2 MB/s (latency-bound),
+        # so all files at once, many ranged connections each (first run: 24 GB at 2.8 MB/s = 1.5 h with 16 on one file)
+        conc = int(os.environ.get("PANO360_DL_CONC", 48))
+        cfg = TransferConfig(multipart_threshold=16 << 20, multipart_chunksize=16 << 20, max_concurrency=conc)
+        todo = [f for f in man["files"] if f["name"] not in set(o.get("exclude") or [])
+                and not ((media / f["name"]).exists() and (media / f["name"]).stat().st_size == f["size"])]
+        t_dl = time.time()
+        with ThreadPoolExecutor(max(1, len(todo))) as ex:
+            list(ex.map(lambda f: s3.download_file(BUCKET, f["key"], str(media / f["name"]), Config=cfg), todo))
+        gb = sum(f["size"] for f in todo) / 1e9
+        res["download"] = {"gb": round(gb, 2), "seconds": round(time.time() - t_dl), "mb_s": round(gb * 1000 / max(1, time.time() - t_dl), 1),
+                           "connections": conc * len(todo)}
+        log("download", res["download"])
         put(label="frames+views+sfm")
         workers = min(16, os.cpu_count() or 4)
+        dense = None
+        if o.get("dense"):
+            dense = dict(o["dense"])
+            if dense.get("prior_key"):
+                dense["prior"] = get_json(s3, dense["prior_key"])
         st = process([media], work, n_frames=o["n_frames"], fps=o["fps"], fov=o["fov"], pano_width=o.get("pano_width"),
-                     matcher=o["matcher"], mapper=o["mapper"], sfm_side=o["sfm_side"], workers=workers, person=o.get("person", True))
+                     matcher=o["matcher"], mapper=o["mapper"], sfm_side=o["sfm_side"], workers=workers, person=o.get("person", True),
+                     labels=o.get("labels"), dense=dense, exclude=o.get("exclude"), mask_refine=bool(o.get("mask_refine")))
         from .build_tour import build_tour
         from .run import export_web
 
@@ -1425,8 +1527,11 @@ def remote() -> None:
             up(Path(sec["poses"]), f"m{sec['model']}/pano_poses.json")
         # 2) the 360 condition: capture points + photographer-free panoramas (same model, same frame as the 3DGS)
         navs = {}
-        for mdl in [0] + [x["model"] for x in secs]:
-            put(label=f"360 panoramas (model {mdl})")
+
+        def nav_all():
+          for mdl in [0] + [x["model"] for x in secs]:
+            if not o.get("nav_parallel"):
+                put(label=f"360 panoramas (model {mdl})")
             try:
                 navs[mdl] = nav_stage(work, None, spacing=o["spacing"], camera_height=o["camera_height"], labels=o.get("labels"),
                                       pano_clip=o.get("pano_clip"), nav_pano_width=o.get("nav_pano_width"), workers=workers, model=mdl)
@@ -1440,6 +1545,22 @@ def remote() -> None:
             up_dir(nd, nd.name)
             up_dir(work / ("nav_filled" if not mdl else f"nav_filled_m{mdl}"), "nav_filled" if not mdl else f"nav_filled_m{mdl}")
             put(nav=navs)
+        import threading
+        nav_thread = None
+        if o.get("nav_parallel"):  # CPU/small-GPU work next to the training (the 6 h cap is tight for ~1000 panoramas)
+            nav_thread = threading.Thread(target=nav_all, daemon=True)
+            nav_thread.start()
+        else:
+            nav_all()
+        if o.get("figures"):  # thesis figures: pipeline stages of one frame + the training process (pano360_trainfig)
+            try:
+                fig_dir = work / "figures"
+                pipeline_figure_assets(work, st, fig_dir / "pipeline", o["figures"].get("pipeline_frame") or {})
+                up_dir(fig_dir, "figures")
+                os.environ["PANO360_FIG_DIR"] = str(fig_dir / "training")
+                os.environ["PANO360_FIG_VIEWS"] = json.dumps(o["figures"].get("views") or [])
+            except Exception as e:  # noqa: BLE001
+                res["figures_error"] = str(e)[:300]
         # 3) 3DGS (person-masked loss; falls back to plain gsplat if the masked trainer fails)
         max_h = float(os.environ.get("MAX_HOURS") or 5)
         left_h = max_h - (time.time() - res["started"]) / 3600 - 0.6
@@ -1463,15 +1584,27 @@ def remote() -> None:
                                              test_every=o["test_every"], progress=progress), "masked": False}
         info = train(ds, work / "train", steps)
         put(label="export", train={k: v for k, v in info.items() if k != "ply"})
+        if o.get("figures"):
+            try:
+                from .pano360_trainfig import tb_to_csv
+                tb_to_csv(str(Path(info["ply"]).parents[1]), str(work / "figures" / "training" / "loss.csv"))
+            except Exception as e:  # noqa: BLE001
+                res["figures_tb_error"] = str(e)[:300]
+            up_dir(work / "figures", "figures")
         sdir = ROOT / "scenes" / name
         build_tour(ds / "sparse" / "0", Path(info["ply"]), sdir, title=o.get("title") or name, capture_height=o["camera_height"])
         web = export_web(sdir, mobile_max_splats=o.get("mobile_cap"))
         for f in ("tour.json", "scene.spz", "scene.mobile.spz", "build_report.json", "scene.ply"):
             up(sdir / f, f"scene/{f}")
-        for f in (work / "train" / "result" / "stats").glob("*.json"):
+        for f in (Path(info["ply"]).parents[1] / "stats").glob("*.json"):
             up(f, f"stats/{f.name}")
         up(work / "train" / "train.log", "train.log")
+        up(Path(info["ply"]).parents[2] / "train.log", "train_used.log")
+        for f in (work / "train" / "setup.log", Path(info["ply"]).parents[2] / "setup.log"):
+            up(f, f"logs/{f.parent.name}_{f.name}")
         put(label="main scene done", web=web)
+        if nav_thread is not None:
+            nav_thread.join(timeout=max(60, (max_h - (time.time() - res["started"]) / 3600 - 0.25) * 3600))
         # 4) places in their own model: a small 3DGS each while time allows
         sec_out = {}
         for sec in secs:
@@ -1577,6 +1710,15 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--no-person-mask", action="store_true", help="skip person segmentation (SfM + training masks)")
     ap.add_argument("--train-flags", default="app_opt", help='gsplat flags; default "app_opt" = per-image exposure/appearance '
                     '(clips with very different brightness); "" = none')
+    ap.add_argument("--dense-prior", help="cloud: dense sharp selection (every 30 fps frame scored, sharpest per ~0.15-0.5 m); "
+                    "travel + cross-clip SfM pairs from this FETCHED earlier run's SfM (name, e.g. wolhajeong360)")
+    ap.add_argument("--dense-scale", type=float, help="metres per SfM unit of that run (default: its nav scale)")
+    ap.add_argument("--exclude", action="append", default=[], help="cloud: leave this clip file out (repeatable)")
+    ap.add_argument("--mask-refine", action="store_true", help="convex hull + temporal union (+-1 panorama) of the person masks for training")
+    ap.add_argument("--nav-parallel", action="store_true", help="360 panoramas/fill in a thread next to the training")
+    ap.add_argument("--gpus", help="cloud: comma-separated RunPod GPU type ids (default: the sm_89 list)")
+    ap.add_argument("--figures", type=Path, help='cloud: record the training for thesis figures, json {"views": [{"name", "clip", "t", '
+                    '"view", "focal"}], "pipeline_frame": {"clip", "t"}} (pano360_trainfig.py)')
     ap.add_argument("--work", type=Path)
     a = ap.parse_args(argv)
     labels = json.loads(a.labels.read_text(encoding="utf-8")) if a.labels else None
@@ -1653,8 +1795,22 @@ def main(argv: list[str] | None = None) -> None:
                 "camera_height": a.camera_height, "labels": labels, "pano_clip": a.pano_clip, "nav_pano_width": a.nav_pano_width,
                 "title": a.title, "mobile_cap": 1_500_000, "pano_w_guess": pw, "person": not a.no_person_mask,
                 "train_flags": a.train_flags.split(),
-                "steps_scaler": a.steps // 30000 if a.steps > 30000 and a.steps % 30000 == 0 else 1}
-        r = launch(a.name, files, opts, a.hours, dry_run=a.dry_run_cloud)
+                "steps_scaler": a.steps // 30000 if a.steps > 30000 and a.steps % 30000 == 0 else 1,
+                "exclude": a.exclude, "mask_refine": a.mask_refine, "nav_parallel": a.nav_parallel}
+        if a.figures:
+            opts["figures"] = json.loads(a.figures.read_text(encoding="utf-8"))
+        if a.dense_prior:
+            from .pano360_dense import build_prior
+            base = ROOT / "data" / "pano360" / a.dense_prior / "cloud"
+            scale = a.dense_scale or json.loads((base / "nav" / "nav.json").read_text(encoding="utf-8")).get("scale")                 or json.loads((base / "result.json").read_text(encoding="utf-8"))["nav"]["0"]["scale"]
+            prior = build_prior(base / "work" / "pano360.json", base / "work" / "pano_poses.json", float(scale))
+            prior_key = f"pano360/{a.name}/prior.json"
+            if not a.dry_run_cloud:
+                from .inbox import BUCKET
+                s3.put_object(Bucket=BUCKET, Key=prior_key, Body=json.dumps(prior).encode(), ContentType="application/json")
+            opts["dense"] = {"prior_key": prior_key, "spacing": 0.3, "rot_deg": 20.0, "clip_order": sorted(f["name"] for f in files),
+                             "prior_from": a.dense_prior, "prior_scale_m": float(scale), "prior_panos": sum(len(v) for v in prior["clips"].values())}
+        r = launch(a.name, files, opts, a.hours, dry_run=a.dry_run_cloud, gpus=a.gpus.split(",") if a.gpus else None)
     print(json.dumps(r, ensure_ascii=False, indent=1, default=str))
 
 

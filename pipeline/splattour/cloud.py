@@ -287,7 +287,8 @@ def mcmc_reg_flags(dataset: Path, f) -> list[str]:
     captures each one is seen rarely and the regulariser wins: on Zip-NeRF Alameda (1734 photos)
     73% of Gaussians died and were relocated every refine step and training collapsed (PSNR 11).
     Scale it down with the photo count (Dr Johnson, 263 photos, keeps 0.01)."""
-    n = len([p for p in (dataset / "images").iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png")])
+    # rglob: pano360 datasets keep their views in images/pano_camera<i>/ (iterdir counted 0 -> reg stayed 0.01, 2026-09-26)
+    n = len([p for p in (dataset / "images").rglob("*") if p.suffix.lower() in (".jpg", ".jpeg", ".png")])
     reg = round(min(0.01, 0.01 * 300 / max(n, 1)), 5)
     return [f"{f('opacity_reg')} {reg}", f"{f('scale_reg')} {reg}"]
 

@@ -177,3 +177,52 @@ clip 번호는 파일 이름순: 0 = `_0007`(앞마당 → 끝에 어두운 실�
 - 고친 것: 분할 확신도 기준 0.25 → **0.08**(`PANO360_SEG_CONF`), 사람 덩어리마다 볼록 껍질(convex hull)로 윤곽 누락 보완, 소스 쪽 마스크 = 자기 마스크 ∪ 앞뒤 1프레임 마스크, 폭의 1.2% 팽창, 소스 3개 이상이 보는 픽셀은 **중앙값 투표**(중앙값과 28 이상 다른 소스는 버림), 채운 곳 안의 주변보다 45% 이상 어두운 얼룩은 AI 채움으로.
 - A/B(같은 파노라마): 앞뒤 2프레임 + 2.5% 팽창은 채울 수 있는 곳이 너무 줄어 LaMa가 넓게 지어내서 오히려 나빴다 → 기본값 앞뒤 1프레임, 1.2%.
 - 주의: 지금 돌고 있는 클라우드 작업(pod 8aju075t0f7phi)은 옛 기준(0.25)으로 분할한다. 3DGS 학습 마스크와 360 채움에 같은 누락이 생길 수 있다.
+
+## 8. 2026-09-26 밤: 첫 전체 실행 결과 + 고화질 판(wolhajeong360-hq)
+
+### 첫 실행(pod 8aju075t0f7phi, 400장, 옛 분할 기준 0.25) 결과
+- **연결**: 4개 클립의 파노라마 400장 중 399장이 **모델 하나**에 들어감(0007 111장, 0008 203장, 0009 38장, 0010 47장, 재투영 0.649 px, 점 13만). 평면도에서 0007과 0008의 앞마당 궤적이 겹치고, 0009와 0010이 같은 자리에 겹친다(`docs/checks/wolhajeong360/sfm_points_cameras.jpg`).
+- **0009 = 0010**: 두 영상을 나란히 보면 같은 방(옷걸이 3개, 작은 창, 침대, 펜던트 등)을 불 끄고/켜고 찍은 것. 고화질 판에서는 어두운 0009를 뺐다(노출 보정 없이 학습하면 같은 벽이 두 색으로 싸움).
+- **3DGS는 망가짐**: PSNR 16.3 / SSIM 0.568 / LPIPS 0.464(300만, 30k). 눈높이 화면은 뿌연 덩어리뿐(`docs/checks/wolhajeong360/rooms_eye_level.jpg`). 원인 두 가지:
+  1. `cloud.mcmc_reg_flags`가 `images/` 바로 아래 사진만 셌는데 pano360 데이터셋은 `images/pano_camera<i>/`에 있어 0장으로 세어 **정규화가 0.01로 고정**(4800장이면 0.000625여야 함) → Alameda 때와 같은 붕괴: 스텝 6600부터 매 정리마다 300만 중 180만~295만 개가 죽고 재배치. 고침: `rglob`.
+  2. 사람 마스크 학습(`train_masked`)은 정상으로 돌다가 스텝 22100에서 24 GB 카드(4090) **메모리 부족**으로 죽고, 마스크 없는 학습으로 넘어감. 고침: 48 GB 카드만(`--gpus`), `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+- **360 지점**: 오디오 상관이 우연히 높아(peak_ratio 8~19) 클립 4개를 "동시에 찍은 rig"로 판정 → 360 조건이 한 클립(0009)만 씀(11지점). 깊이 모델은 transformers 새 버전이 torch 2.4를 거부해 실패 → 사람 채우기 안 됨. 고침: 파일 이름의 녹화 시각(CAM_YYYYMMDDhhmmss)이 겹치지 않으면 소리가 비슷해도 rig 아님, `transformers<4.50`.
+
+### VSR 시험 (노트북 CPU, `pipeline/splattour/vsr_pilot.py`, 결과 `docs/checks/vsr/`)
+같은 원근 크롭(2444×1712 중 256×256, 30 fps 연속 16프레임) 8곳: 사랑방 살창문·작은 창·팔각 살창·흰 벽, 거실 너머 마당, 어두운 살창, 어두운 흰 벽, 기와.
+- 모델: **BasicVSR++**(REDS4 BI x4, OpenMMLab mmagic, Apache-2.0) `https://download.openmmlab.com/mmediting/restorers/basicvsr_plusplus/basicvsr_plusplus_c64n7_8x1_600k_reds4_20210217-db622b2f.pth` sha256 `db622b2fd4caae0a4c63ab5e54f1cfef7a62a0f3b8ad101aba2eae068d928549`; **RealBasicVSR**(x4, GAN, Apache-2.0) `https://download.openmmlab.com/mmediting/restorers/real_basicvsr/realbasicvsr_c64b20_1x30x8_lr5e-5_150k_reds_20211104-52f77c2c.pth` sha256 `52f77c2c835aaa3fe675b3959b2f85010a6c6f63f77f7e279394646e55a4e376`; 비교용 Real-ESRGAN x2plus(BSD-3) `https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth` sha256 `49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb`. 파일은 `data/pano360/weights/`(git 제외). 네트워크는 mmcv 없이 `pipeline/splattour/vsr.py`로 다시 구현, 체크포인트를 strict=True로 읽음(모든 가중치 일치). 확인: 4배 축소 합성 시험에서 BasicVSR++ 39.2 dB vs bicubic 30.0 dB.
+- A(정답 있는 시험: 원본 크롭을 2배 줄였다가 각 방법으로 2배 복원, 원본과 비교, PSNR/SSIM) / B(원본에 실제로 2배: 선명도 = 평균 기울기, 깜빡임 = 다음 프레임을 광류로 맞춘 뒤 차이):
+
+| 크롭 | A bicubic | A x2plus | A BasicVSR++ | A RealBasicVSR | B 선명도 bic/x2/BV++/RBV | B 깜빡임 bic/x2/BV++/RBV |
+|---|---|---|---|---|---|---|
+| 사랑방 살창문 | 40.4/0.991 | 25.2/0.865 | **43.0/0.995** | 27.8/0.912 | 0.082/0.122/0.082/0.103 | 0.0124/0.0157/0.0132/0.0119 |
+| 흰 벽 + 작은 창 | 35.8/0.990 | 27.8/0.965 | **38.4/0.994** | 27.7/0.959 | 0.138/0.155/0.136/0.157 | 0.0108/0.0113/0.0112/0.0106 |
+| 팔각 살창 | 38.0/0.978 | 28.5/0.874 | **40.5/0.988** | 30.4/0.917 | 0.149/0.154/0.148/0.173 | 0.0150/0.0163/0.0151/0.0133 |
+| 흰 벽 | 59.4/0.999 | 42.0/0.991 | **59.8/0.999** | 37.3/0.992 | 0.004/0.011/0.004/0.014 | 0.0034/0.0030/0.0034/0.0046 |
+| 거실 너머 마당 | 41.1/0.988 | 31.3/0.942 | **42.6/0.993** | 31.0/0.945 | 0.084/0.086/0.083/0.098 | 0.0082/0.0087/0.0082/0.0100 |
+| 어두운 살창 | 55.1/0.998 | 45.1/0.978 | **56.9/0.998** | 39.4/0.973 | 0.009/0.013/0.009/0.012 | 0.0056/0.0055/0.0055/0.0082 |
+| 어두운 흰 벽 | 59.3/0.999 | 43.4/0.992 | **59.9/0.999** | 43.0/0.993 | 0.005/0.010/0.004/0.008 | 0.0026/0.0026/0.0025/0.0055 |
+
+- **판정: VSR은 이번 작업에 쓰지 않음.**
+  1. 8K 영상의 원근 크롭은 이미 화소 격자보다 흐리다(절반으로 줄였다 bicubic으로 되살려도 36~59 dB). 렌즈·이음·압축이 해상도를 정하고, 여러 프레임을 모아도 되살릴 세부가 거의 없다.
+  2. BasicVSR++는 정직하다(합성 시험 +0.4~2.6 dB, 흰 벽에 없는 무늬를 만들지 않고 깜빡임도 bicubic과 같음). 하지만 실제 2배 결과는 눈으로 bicubic과 구별되지 않는다(선명도 동일). 
+  3. GAN 계열(x2plus, RealBasicVSR)은 살창 나무결에 없는 긁힘을 그리고 프레임마다 모양이 바뀌며(깜빡임↑, `p*_temporal_*.jpg` 가운데 줄), 흰 벽의 실제 얼룩은 지우고 톤을 바꾼다(흰 벽 A 42/37 dB). 논문 조건(같은 공간, 실제 정보)에 맞지 않는다.
+  4. 비용: BasicVSR++ x4로 1만 장(2444×1712)을 돌리면 GPU로도 약 10시간 → $8 한도 안에서 불가능, 2배 사진으로 학습하면 학습도 4배.
+  - 대신 시험 중 보인 것: 같은 자리 연속 프레임도 **어떤 프레임은 흔들림으로 흐리다**(`p0_temporal_*`의 네 번째 칸). 그래서 이득은 "좋은 프레임 고르기"에 있다 → 아래 촘촘한 선명 프레임.
+
+### 고화질 판 `wolhajeong360-hq` (pod 4webljp4jz3np5, RTX 6000 Ada $0.84/h, 6시간 상한 = 최악 $5.04)
+명령(노트북에서, `pipeline/`):
+```
+.venv\Scripts\python -m splattour.pano360 cloud --from-inbox 20260925-ccc8575c1d1f --name wolhajeong360-hq --title "월하정 (360 영상, 촘촘한 선명 프레임)" --frames 850 --steps 60000 --cap 5000000 --train-flags "" --labels ../data/pano360/wolhajeong360.labels.draft.json --dense-prior wolhajeong360 --exclude CAM_20260818055448_0009_D.mp4 --mask-refine --nav-parallel --figures ../data/pano360/wolhajeong360-hq.figures.json --gpus "NVIDIA RTX 6000 Ada Generation,NVIDIA L40,NVIDIA L40S" --hours 6
+```
+- **촘촘한 선명 프레임**(`pano360_dense.py`): 30 fps 모든 프레임을 채점(1536 px 수평 띠의 선명도, 광류, 밝기, 클립 3개 동시). 이동 거리는 첫 실행의 SfM 자세(시각으로 보간, 미터)로, 자세가 없는 곳은 광류를 그 클립의 광류/미터 비로 환산. 약 0.15~0.5 m(목표 장수에 맞춰 자동)마다 한 칸, **문턱(밝기가 1초에 25% 넘게 바뀌는 곳, 방 이름 경계 ±1.5초)은 칸을 반으로**, 칸마다 앞뒤 1초 대비 가장 선명한 프레임. 이 카메라 영상은 방향이 고정(흔들림 보정)이라 회전 기준은 사실상 쓰이지 않음. 노트북 시험(0010 25초 + 0008 40초): 1955 프레임 채점 73초, 0.345 m 간격 41장.
+- **SfM 짝**: 첫 실행 자세로 1.2 m 안의 다른 클립/다른 바퀴 파노라마 4개씩, 보는 방향이 50° 안인 사진끼리만 `match_image_pairs`(어휘 트리 루프 검출은 GPU 서버에서 죽었음).
+- **사람 마스크**: 분할 확신도 0.08 + 덩어리마다 볼록 껍질 + 같은 클립 앞뒤 1장과 합집합(`refine_person_masks`), 학습 손실에서 제외, 40% 넘게 가린 사진은 학습에서 뺌.
+- **학습**: 월하정 게시본과 같은 방식(MCMC 500만, 60k = 30k×steps_scaler 2, antialiased, 정규화 자동 = 0.01·300/사진수, bilateral grid·app_opt 없음), 8장마다 1장 시험용.
+- 다운로드: 버킷이 APAC, GPU 서버는 주로 미국·유럽 → 연결 하나가 느림. 파일 3개 동시 × 연결 48개(16 MB 조각)로 받고 속도를 `result.json`의 `download`에 남김.
+- 360 지점·채우기는 학습과 동시에(`--nav-parallel`), 모든 클립에서(이제 passes로 판정).
+- R2: `cloud/pano360/wolhajeong360-hq/`(공개 목록에는 넣지 않음, 링크 전용 `/tour.html?scene=wolhajeong360-hq&from=cloud`).
+
+### 논문 그림: 가우시안이 공간을 이루는 과정 (`pano360_trainfig.py`, `figures.py`)
+- 학습 중(서버): 반복 0(SfM 점에서 시작), 500, 1k, 2k, 5k, 10k, 20k, 30k, 최종에서 고정 시점 3곳(`docs/figures/wolhajeong360-hq.figures.json`, 실행에 쓴 것은 `data/pano360/` 사본: 마당 넓게 = 0008 110초 view 7 초점 0.6배, 처마 = 0008 60초 위쪽 view 11 초점 1.6배, 거실 문 = 0008 182초 view 1 초점 0.8배)을 렌더, 스냅숏마다 개수·크기 평균/중앙값/p90·불투명도 히스토그램·죽은 비율(MCMC 재배치 대상), 100스텝마다 개수, 1k마다 시험 사진 24장 PSNR/SSIM(사람 픽셀 제외), 0·1k·5k·20k 가우시안 float16 npz, 최종에서 "가우시안 자체" 렌더(30% 크기·기본색, 1/4 불투명도). 학습 손실은 gsplat tensorboard → `loss.csv`. 한 프레임의 파이프라인 단계 이미지(등장방형, 12장, 사람·SfM 마스크)도 같이. R2 `cloud/pano360/wolhajeong360-hq/figures/`.
+- 노트북: `python -m splattour.figures wolhajeong360-hq` → `docs/figures/training/`(시점별 반복 몽타주, primitives, curves.png, 원본 PNG), `docs/figures/pipeline/`(stages.jpg, sfm_points_cameras.jpg).

@@ -1,0 +1,9 @@
+{
+ "about": "thesis figures (pano360_trainfig.py): fixed training cameras by clip (file order: 0=0007, 1=0008, 3=0010), video second, rig view (0-7 around at 45 deg, 8-11 looking up +50 deg at 45/135/225/315), focal <1 = wider",
+ "views": [
+  {"name": "courtyard", "clip": 1, "t": 110, "view": 7, "focal": 0.6},
+  {"name": "eaves", "clip": 1, "t": 60, "view": 11, "focal": 1.6},
+  {"name": "doorway", "clip": 1, "t": 182, "view": 1, "focal": 0.8}
+ ],
+ "pipeline_frame": {"clip": 1, "t": 182}
+}
