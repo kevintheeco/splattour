@@ -19,7 +19,7 @@
    .venv\Scripts\python -m splattour.pano360 probe "<받은 폴더>"
    ```
    아래 표를 채운다(출력의 `files[]`, `clips`).
-2. **작게 한 번 돌려 보기 (3~5분, 노트북, 돈 안 듦)**:
+2. **작게 한 번 돌려 보기 (5~10분, 노트북, 돈 안 듦; 8K HEVC는 디코딩이 느림, 급하면 `--seconds 40`)**:
    ```
    .venv\Scripts\python -m splattour.pano360 dry-run "<받은 폴더>" --name wolhajeong360
    ```
