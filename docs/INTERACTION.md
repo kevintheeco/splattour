@@ -113,6 +113,7 @@
 - 코드: `viewer/src/doors.js`(데이터·문짝·애니메이션·소리, 두 조건 공용), `viewer/src/app/appmode.js`(3DGS), `viewer/src/app/pano360.js`(360°), `viewer/src/app/portals.js`(방별 모델).
 
 ### 6-2. nav.json에 문 적기 (손으로 편집)
+- **실제 문이 있는 자리에만** 문을 둔다(대표 결정 2026-09-26, "왜곡은 안 된다"). 문짝이 없는 개구부에 가상의 문을 만들지 않는다. 월하정 대문간–앞마당 사이에는 실제 문짝이 없어 문을 두지 않았다(실제 대문은 통로 거리 쪽 끝, 탐색 범위 밖). drjohnson의 식당 문틀 문은 기능 확인용 초안(`draft`)이다.
 ```json
 "doorFx": { "duration": 0.9, "sound": true },
 "doors": [{

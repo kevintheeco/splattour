@@ -5,7 +5,7 @@
 // frames to docs/checks/doors/, plus doors-report.json (door events from the
 // study log, measured opening time, console errors).
 //   node scripts/doors-check.mjs [case ...]     (VIEWER_URL, default http://localhost:5190)
-// cases: dj-splat dj-pano wh-splat wh-pano portal
+// cases: dj-splat dj-pano portal  (월하정: no door until a real one is measured, see docs/INTERACTION.md 6-2)
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 import path from "node:path";
@@ -21,8 +21,6 @@ const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/6
 const CASES = {
   "dj-splat": { cond: "splat", url: "/?scene=drjohnson&app=1&space=drjohnson", from: "n3", to: "n11", door: "d-dining" },
   "dj-pano": { cond: "pano", url: "/pano.html?space=drjohnson&dev=1", from: "n3", via: ["n9"], to: "n8", door: "d-dining" },
-  "wh-splat": { cond: "splat", url: "/?scene=wolhajeong&app=1&space=wolhajeong", from: "n4", to: "n0", door: "d-gate" },
-  "wh-pano": { cond: "pano", url: "/pano.html?space=wolhajeong&dev=1", from: "n8", via: ["n4"], to: "n0", door: "d-gate" },
   "portal": { cond: "splat", url: "/?scene=drjohnson-split-parlour&app=1&space=drjohnson&navfile=nav.split-test.json", from: "n10", to: "n11", door: "d-dining", portal: true },
 };
 const pick = process.argv.slice(2);
