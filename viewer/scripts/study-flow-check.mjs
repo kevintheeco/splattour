@@ -50,7 +50,7 @@ for (let k = 0; k < 2; k++) {
     }
     await p.waitForTimeout(400);
     if (t === 0) await p.screenshot({ path: path.join(out, `s0${k + 1}-study-${isPano}.png`) });
-    await p.click(".vc-task .vc-pill >> nth=0");
+    await p.click(".vc-task [data-act=arrive], .vc-task [data-act=point], .vc-task [data-act=choice] >> nth=0");
     await p.waitForTimeout(700);
   }
   await p.screenshot({ path: path.join(out, `s0${k + 1}-study-${isPano}-done.png`) });

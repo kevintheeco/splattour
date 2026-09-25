@@ -127,11 +127,11 @@ button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent
 .ex-card.splat .ex-ic { background: linear-gradient(145deg, #fde8e4, #f7d4cd); color: var(--accent-2); }
 .ex-name { font-weight: 750; font-size: 16px; letter-spacing: -0.02em; }
 .ex-text { font-size: 13.5px; color: var(--muted); line-height: 1.55; margin-top: 4px; }
-.ex-state { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12.5px; font-weight: 650; color: var(--ink-2); }
+.ex-state { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 4px 10px 4px 8px; border-radius: 999px; background: #eaf5ee; font-size: 12px; font-weight: 700; color: #2d6b45; }
 .ex-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3f9a62; }
-.ex-state.wait { color: #8a6a1f; }
+.ex-state.wait { color: #83560a; background: #fff3d9; }
 .ex-state.wait::before { background: #d8b35a; }
-.ex-state.dev { color: #8a6a1f; }
+.ex-state.dev { color: #83560a; background: #fff3d9; }
 .ex-state.dev::before { background: #e6a23c; }
 
 /* photo tour tiles */
@@ -193,9 +193,14 @@ button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent
 .go small { font-size: 11px; font-weight: 750; letter-spacing: 0.04em; opacity: 0.82; line-height: 1.2; }
 .go b { font-size: 15.5px; font-weight: 750; letter-spacing: -0.025em; line-height: 1.3; white-space: nowrap; }
 .go span { font-size: 11.5px; font-weight: 550; opacity: 0.86; margin-top: 1px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.go.off { background: #f1eee8; color: var(--muted); box-shadow: none; cursor: default; }
-.go.off span { opacity: 1; color: #8a6a1f; }
-.go.off small { opacity: 0.7; }
+/* not ready yet: a calm card with a status chip, not a greyed-out button */
+.go.off { background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px rgba(31, 29, 26, 0.04); cursor: default; }
+.go.off > .ic { color: var(--ink-2); }
+.go.off small { color: var(--muted); opacity: 1; }
+.go.off span { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 3px 8px 3px 7px; border-radius: 999px; background: #fff3d9; color: #83560a; font-size: 11px; font-weight: 750; opacity: 1; max-width: 100%; }
+.go.off span::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: #e0a526; box-shadow: 0 0 0 0 rgba(224, 165, 38, 0.5); animation: wait-pulse 2s var(--ease) infinite; }
+@keyframes wait-pulse { 0% { box-shadow: 0 0 0 0 rgba(224, 165, 38, 0.55); } 70%, 100% { box-shadow: 0 0 0 6px rgba(224, 165, 38, 0); } }
+@media (prefers-reduced-motion: reduce) { .go.off span::before { animation: none; } }
 .go.dev::after { content: "개발용"; position: absolute; right: 8px; top: 8px; font-size: 10px; font-weight: 750; background: #ffd466; color: #3a2a00; border-radius: 5px; padding: 1px 5px; }
 
 /* photo tour sheet & lightbox */

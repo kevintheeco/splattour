@@ -29,6 +29,15 @@ async function ctx(w, h) {
   p.on("console", (m) => m.type() === "error" && report.errors.push(`[${w}x${h}] ${m.text()}`));
   return p;
 }
+// look around a little (a real drag on the view): folds the task card into its pill
+async function drag(p) {
+  const v = p.viewportSize();
+  await p.mouse.move(v.width * 0.6, v.height * 0.55);
+  await p.mouse.down();
+  await p.mouse.move(v.width * 0.45, v.height * 0.55, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(900);
+}
 async function shot(p, name, opts = {}) {
   const f = path.join(out, `${name}.png`);
   await p.screenshot({ path: f, ...opts });
@@ -82,9 +91,13 @@ await p.goto(`${base}/pano.html?space=drjohnson&tasks=1`);
 await p.waitForFunction(() => window.pano360?.current);
 await p.waitForTimeout(1500);
 await shot(p, "p06-pano-drjohnson");
-await p.click(".vc-plan-btn");
-await p.waitForTimeout(500);
+await drag(p);
+await shot(p, "p06-pano-drjohnson-pill");
+await p.click(".vc-plan");
+await p.waitForTimeout(800);
 await shot(p, "p06-pano-drjohnson-plan");
+await p.click(".vc-sheet-close");
+await p.waitForTimeout(500);
 const pano = await p.evaluate(async () => {
   const P = window.pano360;
   const to = P.current.neighbors.find((id) => P.nav.byId.get(id).room !== P.current.room) || P.current.neighbors[0];
@@ -104,8 +117,12 @@ await p.goto(`${base}${TOUR}?scene=${scene}&app=1&space=${scene}&tasks=1&onboard
 await p.waitForFunction(() => window.splattour && window.__app, null, { timeout: 240000 });
 await p.waitForTimeout(3500);
 await shot(p, "p07-3dgs");
-await p.click(".vc-plan-btn");
-await p.waitForTimeout(600);
+await drag(p);
+await p.evaluate(async () => { const S = window.splattour; S.go(S.tour.byId.get("n9")); while (S.nav.busy) await new Promise((r) => setTimeout(r, 50)); });
+await p.waitForTimeout(1200);
+await shot(p, "p07-3dgs-walked");
+await p.click(".vc-plan");
+await p.waitForTimeout(800);
 await shot(p, "p07-3dgs-plan");
 report.splat = await p.evaluate(() => ({ room: document.querySelector(".vc-room").textContent, mode: window.splattour.tour.splatMode }));
 
@@ -131,15 +148,19 @@ await shot(p, "l02-detail");
 await p.goto(`${base}/pano.html?space=drjohnson&tasks=1`);
 await p.waitForFunction(() => window.pano360?.current);
 await p.waitForTimeout(1500);
-await p.click(".vc-plan-btn");
-await p.waitForTimeout(500);
+await drag(p);
 await shot(p, "l06-pano-drjohnson");
+await p.click(".vc-plan");
+await p.waitForTimeout(800);
+await shot(p, "l06-pano-drjohnson-plan");
 await p.goto(`${base}${TOUR}?scene=${scene}&app=1&space=${scene}&tasks=1&onboarding=0`);
 await p.waitForFunction(() => window.splattour && window.__app, null, { timeout: 240000 });
 await p.waitForTimeout(3500);
-await p.click(".vc-plan-btn");
-await p.waitForTimeout(600);
+await drag(p);
 await shot(p, "l07-3dgs");
+await p.click(".vc-plan");
+await p.waitForTimeout(800);
+await shot(p, "l07-3dgs-plan");
 await p.context().close();
 
 // portrait, full screen requested on an iPhone (no Fullscreen API): CSS fallback + rotate hint

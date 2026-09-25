@@ -10,7 +10,7 @@
 // placeholder (and only with &dev=1 while nav.json says the captures are not ready).
 import * as THREE from "three";
 import { LookControls } from "../look.js";
-import { loadListing, loadNav, loadTasks, esc, bearing } from "./data.js";
+import { loadListing, loadNav, loadTasks, esc, bearing, spaceBase } from "./data.js";
 import { icon } from "./icons.js";
 import { ViewerChrome, matchLook } from "./chrome.js";
 import { TaskRunner } from "./tasks.js";
@@ -291,7 +291,7 @@ async function main() {
   function arrive(node) {
     current = node;
     showSpots(node);
-    chrome.setRoom(nav.roomName(node.room));
+    chrome.setRoom(nav.roomName(node.room), node.room);
     const u = new URL(location.href);
     u.searchParams.set("node", node.id);
     history.replaceState(null, "", u);
@@ -327,7 +327,7 @@ async function main() {
 
   // ---------- chrome, study, tasks ----------
   const chrome = new ViewerChrome({
-    spaceTitle: listing.title, condition: "pano", backHref: STUDY ? "#" : backHref, nav, look,
+    spaceTitle: listing.title, condition: "pano", backHref: STUDY ? "#" : backHref, nav, look, base: spaceBase(spaceId),
     plan: params.get("plan") !== "0",
     onBack: () => (STUDY ? confirm("실험을 그만두고 나갈까요?") : true),
   });
@@ -358,7 +358,7 @@ async function main() {
   $("#loader").classList.add("done");
   if (tasks.length) {
     runner = new TaskRunner({
-      slot: chrome.taskSlot, tasks, nav,
+      slot: chrome.taskSlot, tasks, nav, look,
       log: (e, d) => study?.log(e, d),
       getPose: () => ({ x: current.position[0], z: current.position[2], yaw: look.yaw, room: current.room }),
       jumpTo: async (id) => { const n = nav.byId.get(id); if (n && n !== current) await place(n, { yaw: yawOfNode(n) }); else if (n) look.set(yawOfNode(n), START_PITCH); },

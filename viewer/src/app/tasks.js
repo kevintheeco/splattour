@@ -1,16 +1,20 @@
-// Study tasks (tasks.json), shown the same way in both conditions.
-//   goto   "…까지 가 보세요"      → [도착했어요]; arrival in the target room is also logged by itself
-//   point  "…은 어느 방향인가요?"  → face it, [이 방향이에요]; logs the angle error
-//   choice "…"                     → one of the options
+// Study tasks (tasks.json), shown the same way in both conditions: a slim
+// pill under the top bar ("1/5 · …" + the answer button). A new task opens
+// as a small card so it can be read; it folds back into the pill as soon as
+// you start looking around, and a tap on the pill opens it again.
+//   goto   "…까지 가 보세요"      → [도착]; arrival in the target room is also logged by itself
+//   point  "…은 어느 방향인가요?"  → face it, [이 방향]; logs the angle error
+//   choice "…"                     → one of the options (in the open card)
 // Each task may start at a capture point (`start`): the viewer puts you there first.
 import { icon } from "./icons.js";
 import { esc, bearing, angDiff } from "./data.js";
 
 export class TaskRunner {
-  // opts: { slot, tasks, nav, log, getPose: () => ({x, z, yaw, room}), jumpTo(nodeId), onDone, nextLabel }
+  // opts: { slot, tasks, nav, log, look, getPose: () => ({x, z, yaw, room}), jumpTo(nodeId), onDone, nextLabel }
   constructor(opts) {
     this.o = opts;
     this.i = -1;
+    this.open = true;
     this.el = document.createElement("section");
     this.el.className = "vc-task";
     opts.slot.appendChild(this.el);
@@ -20,13 +24,15 @@ export class TaskRunner {
     this.crosshair.innerHTML = icon("target");
     document.body.appendChild(this.crosshair);
     this.el.addEventListener("click", (e) => this._click(e));
+    // fold into the pill once the participant starts exploring
+    opts.look?.addEventListener("interact", () => {
+      if (this.open && this.task && this.task.type !== "choice" && performance.now() - this.shownAt > 900) this.setOpen(false);
+    });
   }
 
   get task() { return this.o.tasks[this.i]; }
 
-  start() {
-    this.next();
-  }
+  start() { this.next(); }
 
   async next() {
     this.i++;
@@ -36,10 +42,10 @@ export class TaskRunner {
     if (t.start) await this.o.jumpTo(t.start);
     this.t0 = performance.now();
     this.o.log("task_start", { id: t.id, type: t.type, target: t.target ?? null, start: t.start ?? null });
+    this.open = true;
     this._render();
   }
 
-  // Called by the viewer whenever the room changes.
   roomChanged(roomId) {
     const t = this.task;
     if (t?.type === "goto" && !this.reached && roomId === t.target) {
@@ -48,38 +54,47 @@ export class TaskRunner {
     }
   }
 
+  setOpen(on) {
+    if (this.open === on) return;
+    this.open = on;
+    this.el.classList.toggle("open", on);
+    this.o.log("task_card", { id: this.task?.id ?? null, open: on });
+  }
+
   _render(done = false) {
-    const t = this.task;
-    const n = this.o.tasks.length;
-    this.crosshair.hidden = !(t?.type === "point") || done;
+    const t = this.task, n = this.o.tasks.length;
+    this.crosshair.hidden = t?.type !== "point" || done;
+    const num = `<span class="vc-task-n">${done ? n : this.i + 1}<i>/${n}</i></span>`;
     if (done) {
-      this.el.innerHTML = `<div class="vc-task-head"><span>과제 ${n} / ${n}</span></div><p class="vc-task-q">모든 과제를 마쳤어요.</p>
-        <div class="vc-task-acts">${this.o.onDone ? `<button class="vc-pill primary" data-act="done">${esc(this.o.nextLabel || "다음으로")}${icon("chevron")}</button>` : ""}</div>`;
+      this.open = true;
+      this.el.className = "vc-task open done";
+      this.el.innerHTML = `<div class="vc-task-row">${num}<p class="vc-task-q">모든 과제를 마쳤어요</p>${this.o.onDone ? `<button class="vc-pill primary" data-act="done">${esc(this.o.nextLabel || "다음으로")}${icon("chevron")}</button>` : ""}</div>`;
       return;
     }
-    let acts = "";
-    if (t.type === "goto") acts = `<button class="vc-pill primary" data-act="arrive">${icon("check")}도착했어요</button>`;
-    else if (t.type === "point") acts = `<button class="vc-pill primary" data-act="point">${icon("target")}이 방향이에요</button>`;
-    else if (t.type === "choice") acts = (t.options || []).map((o, k) => `<button class="vc-pill" data-act="choice" data-k="${k}">${esc(o)}</button>`).join("");
+    const quick = t.type === "goto" ? `<button class="vc-pill primary" data-act="arrive">${icon("check")}<span>도착</span></button>`
+      : t.type === "point" ? `<button class="vc-pill primary" data-act="point">${icon("target")}<span>이 방향</span></button>`
+      : `<button class="vc-pill" data-act="expand"><span>답하기</span></button>`;
+    const choices = t.type === "choice" ? `<div class="vc-task-choices">${(t.options || []).map((o, k) => `<button class="vc-pill" data-act="choice" data-k="${k}">${esc(o)}</button>`).join("")}</div>` : "";
+    this.el.className = `vc-task ${this.open ? "open" : ""} t-${t.type}`;
     this.el.innerHTML = `
-      <div class="vc-task-head"><span>과제 ${this.i + 1} / ${n}</span><button class="vc-task-min" data-act="min" aria-label="과제 접기">${icon("up")}</button></div>
-      <p class="vc-task-q">${esc(t.prompt)}</p>
-      <div class="vc-task-acts">${acts}</div>`;
-    this.el.classList.remove("min", "enter");
+      <div class="vc-task-row" data-act="toggle">
+        ${num}<p class="vc-task-q">${esc(t.prompt)}</p>${quick}
+        <button class="vc-task-tg" data-act="toggle" aria-label="과제 펼치기/접기">${icon("down")}</button>
+      </div>${choices}`;
+    this.shownAt = performance.now();
+    this.el.classList.remove("enter");
     void this.el.offsetWidth;
     this.el.classList.add("enter");
   }
 
   _click(e) {
-    const b = e.target.closest("button");
+    const b = e.target.closest("[data-act]");
     if (!b) return;
     const act = b.dataset.act;
-    if (act === "min") {
-      const m = this.el.classList.toggle("min");
-      b.innerHTML = icon(m ? "down" : "up");
-      return;
-    }
+    if (act === "toggle") return this.setOpen(!this.open);
+    if (act === "expand") return this.setOpen(true);
     if (act === "done") return this.o.onDone?.();
+    e.stopPropagation();
     const t = this.task;
     if (!t) return;
     const pose = this.o.getPose();
@@ -97,7 +112,7 @@ export class TaskRunner {
     }
     this.o.log("task_answer", rec);
     this.el.classList.add("sent");
-    setTimeout(() => { this.el.classList.remove("sent"); this.next(); }, 380);
+    setTimeout(() => { this.el.classList.remove("sent"); this.next(); }, 420);
   }
 
   _finish() {

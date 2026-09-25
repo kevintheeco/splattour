@@ -4,7 +4,7 @@
 // point of nav.json), keeps walking inside the same exploration range as the
 // 360° tour (within range.radius of a capture point), and runs the same tasks.
 import * as THREE from "three";
-import { loadListing, loadNav, loadTasks } from "./data.js";
+import { loadListing, loadNav, loadTasks, spaceBase } from "./data.js";
 import { ViewerChrome, matchLook } from "./chrome.js";
 import { TaskRunner } from "./tasks.js";
 import { summarizeApp } from "./studylog.js";
@@ -60,7 +60,7 @@ class AppMode {
     matchLook(look);
     this.rig = rig;
     const chrome = (this.chrome = new ViewerChrome({
-      spaceTitle: listing?.title || tour.title, condition: "splat", backHref: STUDY ? "#" : backHref, nav, look,
+      spaceTitle: listing?.title || tour.title, condition: "splat", backHref: STUDY ? "#" : backHref, nav, look, base: spaceBase(this.spaceId),
       plan: params.get("plan") !== "0" && !!nav,
       onBack: () => (STUDY ? confirm("실험을 그만두고 나갈까요?") : true),
     }));
@@ -83,7 +83,7 @@ class AppMode {
       this.room = r;
       if (r !== lastRoom) {
         lastRoom = r;
-        chrome.setRoom(nav.roomName(r));
+        chrome.setRoom(nav.roomName(r), r);
         log("room", { room: r });
         this.runner?.roomChanged(r);
       }
@@ -115,7 +115,7 @@ class AppMode {
     const next = params.get("next");
     if (tasks.length) {
       this.runner = new TaskRunner({
-        slot: chrome.taskSlot, tasks, nav, log,
+        slot: chrome.taskSlot, tasks, nav, log, look,
         getPose: () => ({ x: rig.position.x, z: rig.position.z, yaw: look.yaw, room: this.room }),
         jumpTo: jump,
         onDone: () => {

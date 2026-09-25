@@ -1,11 +1,10 @@
 // Shared viewer chrome for the two study conditions (360° 시점 탐색 and
 // 3DGS 자유 시점 탐색). Both viewers mount exactly this: back button, room
-// name, condition caption, task card area, plan toggle, full screen
-// (landscape), look-by-tilting. So the only thing that differs between the
-// conditions is how you explore, never the frame around it.
+// name, condition caption, task pill, floor plan (mini card + full sheet,
+// north-up, "내 위치"), full screen (landscape), look-by-tilting. So the only
+// thing that differs between the conditions is how you explore.
 import { icon } from "./icons.js";
-import { esc } from "./data.js";
-import { PlanView } from "./plan.js";
+import { PlanData, PlanCanvas } from "./plan.js";
 import { Gyro } from "./gyro.js";
 
 const TOUCH = matchMedia("(pointer: coarse)").matches;
@@ -18,7 +17,7 @@ export function matchLook(look) {
 }
 
 export class ViewerChrome {
-  // opts: { root, spaceTitle, condition: "pano"|"splat", backHref, nav, look, plan: bool, onBack }
+  // opts: { spaceTitle, condition: "pano"|"splat", backHref, nav, base (/spaces/<id>/), look, plan: bool, onBack }
   constructor(opts) {
     this.o = opts;
     const cond = opts.condition === "pano" ? "360° 시점 탐색" : "3DGS 자유 시점 탐색";
@@ -29,18 +28,26 @@ export class ViewerChrome {
         <a class="vc-btn vc-back" aria-label="뒤로">${icon("back")}</a>
         <div class="vc-title"><div class="vc-room" aria-live="polite"></div><div class="vc-sub">${cond}</div><div class="vc-devtag" hidden></div></div>
         <div class="vc-actions">
-          <button class="vc-btn vc-plan-btn" aria-label="평면도" aria-pressed="false">${icon("map")}</button>
+          <button class="vc-btn vc-plan-btn" aria-label="평면도 보이기/숨기기" aria-pressed="true">${icon("map")}</button>
           <button class="vc-btn vc-fs-btn" aria-label="전체 화면">${icon("expand")}</button>
         </div>
       </header>
       <div class="vc-task-slot"></div>
-      <div class="vc-plan" hidden><canvas></canvas></div>
+      <button class="vc-plan" hidden aria-label="평면도 크게 보기"><canvas></canvas><span class="vc-plan-exp">${icon("expand")}</span></button>
+      <div class="vc-sheet" hidden>
+        <div class="vc-sheet-card" role="dialog" aria-label="평면도">
+          <div class="vc-sheet-head"><div><b>평면도</b><span class="vc-sheet-room"></span></div><button class="vc-btn vc-sheet-close" aria-label="평면도 닫기">${icon("close")}</button></div>
+          <canvas class="vc-sheet-canvas"></canvas>
+          <div class="vc-sheet-foot"><span class="vc-me-key"></span>내 위치와 보는 방향 · 두 손가락으로 확대, 끌어서 이동</div>
+        </div>
+      </div>
       <button class="vc-btn vc-gyro" aria-label="휴대폰을 움직여 둘러보기" aria-pressed="false" hidden>${icon("compass")}</button>
       <div class="vc-rotate" hidden><div>${icon("rotate", "vc-rotate-ic")}<b>가로로 돌려 주세요</b><span>휴대폰을 옆으로 눕히면 더 넓게 보여요</span><button class="vc-rotate-ok">세로로 볼게요</button></div></div>
       <div class="vc-toast"></div>`;
-    (opts.root || document.body).appendChild(el);
+    document.body.appendChild(el);
     this.el = el;
     this.$ = (s) => el.querySelector(s);
+    this.st = { room: null, pose: null };
 
     const back = this.$(".vc-back");
     back.href = opts.backHref || "/";
@@ -48,14 +55,7 @@ export class ViewerChrome {
       if (opts.onBack && opts.onBack() === false) e.preventDefault();
     });
 
-    // plan (the same schematic in both conditions, from nav.json)
-    this.planOn = false;
-    if (opts.plan === false || !opts.nav) this.$(".vc-plan-btn").hidden = true;
-    else {
-      this.plan = new PlanView(this.$(".vc-plan canvas"), opts.nav);
-      this.$(".vc-plan-btn").addEventListener("click", () => this.togglePlan());
-    }
-
+    this._setupPlan();
     this._setupFullscreen();
 
     // look by tilting the phone (both conditions)
@@ -73,7 +73,61 @@ export class ViewerChrome {
     }
   }
 
-  setRoom(name) {
+  // ---------- plan ----------
+  _setupPlan() {
+    const o = this.o, btn = this.$(".vc-plan-btn");
+    if (o.plan === false || !o.nav) { btn.hidden = true; return; }
+    this.miniOn = true;
+    this.sheetOn = false;
+    PlanData.load(o.nav, o.base).then((data) => {
+      this.plan = data;
+      this.mini = new PlanCanvas(this.$(".vc-plan canvas"), data, { compact: true });
+      this.full = new PlanCanvas(this.$(".vc-sheet-canvas"), data, { interactive: true });
+      // the mini card and the sheet take the plan's proportions
+      const asp = data.W / data.H;
+      this.el.style.setProperty("--plan-asp", String(Math.min(2.4, Math.max(0.8, asp))));
+      const wk = asp > 1.6 ? 1.2 : 1;
+      this.$(".vc-plan").style.width = `calc(var(--plan) * ${wk})`;
+      this.$(".vc-plan").style.height = `calc(var(--plan) * ${wk} / ${Math.min(2.2, Math.max(0.9, asp)).toFixed(3)} + 18px)`;
+      this.$(".vc-plan").hidden = !this.miniOn;
+      this.mini.resize();
+      addEventListener("resize", () => { this.mini.resize(); if (this.sheetOn) this.full.resize(); });
+    });
+    btn.addEventListener("click", () => {
+      this.miniOn = !this.miniOn;
+      btn.classList.toggle("off", !this.miniOn);
+      btn.setAttribute("aria-pressed", String(this.miniOn));
+      if (this.plan) { this.$(".vc-plan").hidden = !this.miniOn; if (this.miniOn) this.mini.resize(); }
+      this.onEvent?.("plan", { mini: this.miniOn });
+    });
+    this.$(".vc-plan").addEventListener("click", () => this.openSheet(true));
+    this.$(".vc-sheet-close").addEventListener("click", () => this.openSheet(false));
+    this.$(".vc-sheet").addEventListener("click", (e) => { if (e.target === e.currentTarget) this.openSheet(false); });
+    // a tap on the big plan (not a drag or pinch) folds it back
+    this.$(".vc-sheet-canvas").addEventListener("click", () => { if (this.full.moved < 8) this.openSheet(false); });
+  }
+
+  openSheet(on) {
+    if (!this.plan || on === this.sheetOn) return;
+    this.sheetOn = on;
+    const s = this.$(".vc-sheet");
+    s.hidden = false;
+    requestAnimationFrame(() => s.classList.toggle("open", on));
+    if (on) {
+      this.full.reset();
+      const card = this.$(".vc-sheet-card"), land = matchMedia("(orientation: landscape) and (max-height: 520px)").matches;
+      card.classList.toggle("fill", land);
+      if (!land) { const w = Math.min(innerWidth, 720); card.style.setProperty("--sheet-h", `${Math.round(Math.min(innerHeight * 0.55, Math.max(260, (w - 44) / (this.plan.W / this.plan.H) + 90)))}px`); }
+      requestAnimationFrame(() => this.full.resize());
+    }
+    else setTimeout(() => { if (!this.sheetOn) s.hidden = true; }, 380);
+    this.$(".vc-plan").classList.toggle("away", on);
+    this.onEvent?.("plan_sheet", { on });
+  }
+
+  setRoom(name, id) {
+    this.st.room = id ?? null;
+    this.$(".vc-sheet-room").textContent = name || "";
     const r = this.$(".vc-room");
     if (r.textContent === name) return;
     r.textContent = name || "";
@@ -82,20 +136,11 @@ export class ViewerChrome {
     r.classList.add("pop");
   }
 
-  // pose for the plan marker: x, z (metres), yaw (radians)
+  // x, z (metres, scene), yaw (radians); the cone takes the camera's horizontal field of view
   setPose(x, z, yaw) {
-    this.pose = { x, z, yaw };
-    if (this.planOn) this.plan.draw(this.pose);
-  }
-
-  togglePlan(on = !this.planOn) {
-    this.planOn = on;
-    this.$(".vc-plan").hidden = !on;
-    const b = this.$(".vc-plan-btn");
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", String(on));
-    if (on) { this.plan.resize(); this.plan.draw(this.pose); }
-    this.onEvent?.("plan", { on });
+    const L = this.o.look;
+    const v = (((L?.fov ?? 70) + (L?.fovKick ?? 0)) * Math.PI) / 180;
+    this.st.pose = { x, z, yaw, hfov: 2 * Math.atan(Math.tan(v / 2) * (innerWidth / innerHeight)) };
   }
 
   get taskSlot() { return this.$(".vc-task-slot"); }
@@ -118,8 +163,12 @@ export class ViewerChrome {
     this._tt = setTimeout(() => t.classList.remove("show"), ms);
   }
 
+  // every frame, from the viewer's render loop
   update() {
     this.gyro?.update();
+    if (!this.plan) return;
+    if (this.miniOn && !this.sheetOn) this.mini.draw(this.st);
+    if (this.sheetOn) this.full.draw(this.st);
   }
 
   // ---------- full screen, landscape ----------

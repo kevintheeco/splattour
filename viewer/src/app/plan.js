@@ -1,107 +1,305 @@
-// Schematic floor plan shared by both conditions: the capture points of
-// nav.json (links between them, room names) and where you are, facing where.
-// Drawn from the same data in both viewers, so neither condition gets a
-// richer map than the other.
-const COLORS = ["#f2b36b", "#8fc3a6", "#9bb7e8", "#e79aa6", "#c8a8e8", "#e8d27a", "#7fd0d6", "#d9a27f"];
+// Floor plan shared by both conditions (360° 시점 탐색 / 3DGS 자유 시점 탐색):
+// the same baked plan image (scripts/bake-plan.mjs → plan.json, plan.png,
+// plan-rooms.png), the same room names and the same "내 위치" marker, so
+// neither condition gets a richer map. North-up and fixed: the map never
+// rotates, only the heading cone does (&planup=heading exists for debugging).
+// Without a baked plan (scene not trained yet) the rooms are drawn as soft
+// shapes around their capture points.
 
-export class PlanView {
-  constructor(canvas, nav) {
-    this.c = canvas;
-    this.nav = nav;
-    const xs = nav.nodes.map((n) => n.position[0]), zs = nav.nodes.map((n) => n.position[2]);
-    const pad = 1.4;
-    this.box = { x0: Math.min(...xs) - pad, x1: Math.max(...xs) + pad, z0: Math.min(...zs) - pad, z1: Math.max(...zs) + pad };
-    this.roomColor = new Map([...nav.rooms.keys()].map((id, i) => [id, COLORS[i % COLORS.length]]));
-  }
+const BLUE = "#2F7CF6";
+const INK = "#3D3A35";
+const DEBUG_HEADING_UP = new URLSearchParams(location.search).get("planup") === "heading";
 
-  resize() {
-    const r = this.c.getBoundingClientRect();
-    const d = Math.min(devicePixelRatio || 1, 2);
-    this.c.width = Math.max(1, Math.round(r.width * d));
-    this.c.height = Math.max(1, Math.round(r.height * d));
-    this.dpr = d;
-  }
+function loadImage(src) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+}
 
-  draw(pose) {
-    const ctx = this.c.getContext("2d");
-    const W = this.c.width, H = this.c.height, d = this.dpr || 1;
-    if (!W) return;
-    const b = this.box;
-    const s = Math.min(W / (b.x1 - b.x0), H / (b.z1 - b.z0));
-    const ox = (W - (b.x1 - b.x0) * s) / 2, oz = (H - (b.z1 - b.z0) * s) / 2;
-    const P = (x, z) => [ox + (x - b.x0) * s, oz + (z - b.z0) * s];
-    ctx.clearRect(0, 0, W, H);
-
-    // links
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(255,255,255,.22)";
-    ctx.lineWidth = 2 * d;
-    ctx.beginPath();
-    for (const n of this.nav.nodes)
-      for (const m of n.neighbors) {
-        if (m < n.id) continue;
-        const o = this.nav.byId.get(m);
-        if (!o) continue;
-        ctx.moveTo(...P(n.position[0], n.position[2]));
-        ctx.lineTo(...P(o.position[0], o.position[2]));
-      }
-    ctx.stroke();
-
-    // capture points, coloured by room
-    for (const n of this.nav.nodes) {
-      const [x, y] = P(n.position[0], n.position[2]);
-      ctx.fillStyle = this.roomColor.get(n.room) || "#fff";
-      ctx.beginPath();
-      ctx.arc(x, y, 3.2 * d, 0, Math.PI * 2);
-      ctx.fill();
+export class PlanData {
+  // nav: prepared nav.json (data.js); base: /spaces/<id>/
+  static async load(nav, base) {
+    const p = new PlanData(nav);
+    try {
+      const r = await fetch(base + "plan.json", { cache: "no-cache" });
+      if (!r.ok || !(r.headers.get("content-type") || "").includes("json")) throw new Error("no plan");
+      const j = await r.json();
+      const [img, idx] = await Promise.all([loadImage(base + j.image), loadImage(base + j.roomImage)]);
+      p._fromBaked(j, img, idx);
+    } catch {
+      p._schematic();
     }
+    return p;
+  }
 
-    // room names at their anchors
-    ctx.font = `600 ${11 * d}px Pretendard, system-ui, sans-serif`;
+  constructor(nav) { this.nav = nav; }
+
+  _fromBaked(j, img, idx) {
+    this.baked = true;
+    const c = Math.cos(j.rotation), s = Math.sin(j.rotation), [u0, w0, u1, w1] = j.bounds, k = j.pxPerM;
+    this.W = img.width;
+    this.H = img.height;
+    this.toImg = (x, z) => [((x * c + z * s) - u0) * k, ((-x * s + z * c) - w0) * k];
+    this.pxPerM = k;
+    this.rot = j.rotation;
+    this.image = img;
+    this.labels = new Map(Object.entries(j.rooms).map(([id, r]) => [id, r.label]));
+    // one tinted overlay per room, cut from the exact-colour room image
+    const cv = document.createElement("canvas");
+    cv.width = this.W; cv.height = this.H;
+    const g = cv.getContext("2d", { willReadFrequently: true });
+    g.drawImage(idx, 0, 0);
+    const src = g.getImageData(0, 0, this.W, this.H).data;
+    this.highlight = new Map();
+    for (const [id, r] of Object.entries(j.rooms)) {
+      const o = document.createElement("canvas");
+      o.width = this.W; o.height = this.H;
+      const og = o.getContext("2d");
+      const d = og.createImageData(this.W, this.H);
+      for (let i = 0; i < src.length; i += 4) if (src[i + 3] > 200 && Math.abs(src[i] - r.color) <= 2 && src[i + 1] < 3) d.data.set([47, 124, 246, 46], i);
+      og.putImageData(d, 0, 0);
+      this.highlight.set(id, o);
+    }
+  }
+
+  // Soft room shapes around the capture points (until a plan is baked).
+  _schematic() {
+    this.baked = false;
+    const nav = this.nav, k = 60, pad = 2.6;
+    const xs = nav.nodes.map((n) => n.position[0]), zs = nav.nodes.map((n) => n.position[2]);
+    const x0 = Math.min(...xs) - pad, z0 = Math.min(...zs) - pad;
+    this.W = Math.ceil((Math.max(...xs) + pad - x0) * k);
+    this.H = Math.ceil((Math.max(...zs) + pad - z0) * k);
+    this.toImg = (x, z) => [(x - x0) * k, (z - z0) * k];
+    this.pxPerM = k;
+    this.rot = 0;
+    const PAL = ["#F4E9D8", "#E2ECDE", "#E0E8F3", "#F3E2E0", "#ECE4F2", "#F2EED6", "#DCEEEC", "#EEE6DE"];
+    const mk = () => { const c = document.createElement("canvas"); c.width = this.W; c.height = this.H; return c; };
+    const img = mk(), g = img.getContext("2d");
+    const rooms = [...nav.rooms.values()].filter((r) => r.nodes.length);
+    const blob = (ctx, r, rad) => {
+      ctx.beginPath();
+      for (const n of r.nodes) { const [x, y] = this.toImg(n.position[0], n.position[2]); ctx.moveTo(x + rad, y); ctx.arc(x, y, rad, 0, Math.PI * 2); }
+      for (const n of r.nodes) for (const m of n.neighbors) {
+        const o = nav.byId.get(m);
+        if (o?.room !== r.id) continue;
+        const [ax, ay] = this.toImg(n.position[0], n.position[2]), [bx, by] = this.toImg(o.position[0], o.position[2]);
+        ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      }
+    };
+    rooms.forEach((r, i) => {
+      g.fillStyle = PAL[i % PAL.length]; g.strokeStyle = PAL[i % PAL.length]; g.lineWidth = 2.2 * k; g.lineCap = "round";
+      blob(g, r, 1.25 * k); g.fill(); g.stroke();
+    });
+    // outline around everything
+    const out = mk(), og = out.getContext("2d");
+    og.drawImage(img, 0, 0);
+    og.globalCompositeOperation = "source-in";
+    og.fillStyle = "#CFC7BA";
+    og.fillRect(0, 0, this.W, this.H);
+    const fin = mk(), fg = fin.getContext("2d");
+    for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]]) fg.drawImage(out, dx, dy);
+    fg.drawImage(img, 0, 0);
+    this.image = fin;
+    this.labels = new Map(rooms.map((r) => [r.id, [r.anchor[0], r.anchor[2]]]));
+    this.highlight = new Map(rooms.map((r) => {
+      const h = mk(), hg = h.getContext("2d");
+      hg.fillStyle = "rgba(47,124,246,0.18)"; hg.strokeStyle = "rgba(47,124,246,0.18)"; hg.lineWidth = 2.2 * k; hg.lineCap = "round";
+      blob(hg, r, 1.25 * k); hg.fill(); hg.stroke();
+      return [r.id, h];
+    }));
+  }
+
+  // Screen angle (canvas, y down) of a world yaw on the plan.
+  screenAngle(yaw) {
+    const dx = -Math.sin(yaw), dz = -Math.cos(yaw), c = Math.cos(this.rot), s = Math.sin(this.rot);
+    return Math.atan2(-dx * s + dz * c, dx * c + dz * s);
+  }
+
+  // Draw into ctx (device px). view: {scale (img px -> device px), ox, oy (device px of img origin)}
+  draw(ctx, view, st, { dpr = 1, compact = false, t = performance.now() } = {}) {
+    const { scale, ox, oy } = view;
+    ctx.save();
+    ctx.setTransform(scale, 0, 0, scale, ox, oy);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(this.image, 0, 0);
+    const hl = st.room && this.highlight.get(st.room);
+    if (hl) ctx.drawImage(hl, 0, 0);
+    ctx.restore();
+
+    // room names (constant size on screen)
+    const fs = (compact ? 10.5 : 13) * dpr;
+    ctx.font = `650 ${fs}px Pretendard, "Pretendard Variable", system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    for (const r of this.nav.rooms.values()) {
-      if (!r.nodes.length) continue;
-      const [x, y] = P(r.anchor[0], r.anchor[2]);
-      const w = ctx.measureText(r.name).width + 12 * d;
-      ctx.fillStyle = "rgba(10,10,12,.62)";
-      roundRect(ctx, x - w / 2, y - 18 * d, w, 16 * d, 8 * d);
-      ctx.fill();
-      ctx.fillStyle = this.roomColor.get(r.id) || "#fff";
-      ctx.fillText(r.name, x, y - 10 * d);
+    const many = this.labels.size > 4;
+    for (const [id, [x, z]] of this.labels) {
+      const cur = id === st.room;
+      if (compact && many && !cur) continue;
+      const [ix, iy] = this.toImg(x, z);
+      const px = ox + ix * scale, py = oy + iy * scale;
+      const name = this.nav.roomName(id);
+      ctx.lineWidth = 3.5 * dpr;
+      ctx.strokeStyle = "rgba(255,255,255,0.92)";
+      ctx.lineJoin = "round";
+      ctx.strokeText(name, px, py);
+      ctx.fillStyle = cur ? "#1F5FD0" : INK;
+      ctx.fillText(name, px, py);
     }
 
-    // you: dot + view cone
-    if (pose) {
-      const [x, y] = P(pose.x, pose.z);
-      // screen: +x right, +y down (= +z). Facing (-sin yaw, -cos yaw) in (x, z).
-      const a = Math.atan2(-Math.cos(pose.yaw), -Math.sin(pose.yaw));
-      const g = ctx.createRadialGradient(x, y, 0, x, y, 30 * d);
-      g.addColorStop(0, "rgba(255,255,255,.55)");
-      g.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = g;
+    // 내 위치: heading cone (camera's horizontal field of view), pulse, blue dot
+    if (st.pose) {
+      const [ix, iy] = this.toImg(st.pose.x, st.pose.z);
+      const px = ox + ix * scale, py = oy + iy * scale;
+      const a = this.screenAngle(st.pose.yaw), half = (st.pose.hfov || 1.2) / 2;
+      const R = (compact ? 40 : 72) * dpr;
+      const gr = ctx.createRadialGradient(px, py, 0, px, py, R);
+      gr.addColorStop(0, "rgba(47,124,246,0.55)");
+      gr.addColorStop(0.7, "rgba(47,124,246,0.2)");
+      gr.addColorStop(1, "rgba(47,124,246,0.04)");
+      ctx.fillStyle = gr;
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.arc(x, y, 30 * d, a - 0.55, a + 0.55);
+      ctx.moveTo(px, py);
+      ctx.arc(px, py, R, a - half, a + half);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = "#e0565b";
-      ctx.lineWidth = 3 * d;
+      ctx.strokeStyle = "rgba(47,124,246,0.45)";
+      ctx.lineWidth = 1.2 * dpr;
       ctx.beginPath();
-      ctx.arc(x, y, 6 * d, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(px + Math.cos(a - half) * R * 0.85, py + Math.sin(a - half) * R * 0.85);
+      ctx.lineTo(px, py);
+      ctx.lineTo(px + Math.cos(a + half) * R * 0.85, py + Math.sin(a + half) * R * 0.85);
       ctx.stroke();
+      const ph = (t % 1800) / 1800;
+      ctx.fillStyle = `rgba(47,124,246,${(0.3 * (1 - ph)).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(px, py, (8 + 14 * ph) * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = "rgba(0,0,0,0.28)";
+      ctx.shadowBlur = 4 * dpr;
+      ctx.shadowOffsetY = 1 * dpr;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(px, py, 8.5 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = BLUE;
+      ctx.beginPath();
+      ctx.arc(px, py, 5.8 * dpr, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+// Canvas + interaction: "mini" (fits the whole plan) or "full" (zoom, pan).
+export class PlanCanvas {
+  constructor(canvas, data, { compact = false, interactive = false } = {}) {
+    this.c = canvas;
+    this.data = data;
+    this.compact = compact;
+    this.zoom = 1;
+    this.pan = [0, 0];
+    this.moved = 0;
+    this.dpr = Math.min(devicePixelRatio || 1, 2);
+    if (interactive) this._bindGestures();
+  }
+
+  resize() {
+    const r = this.c.getBoundingClientRect();
+    this.dpr = Math.min(devicePixelRatio || 1, 2);
+    this.c.width = Math.max(1, Math.round(r.width * this.dpr));
+    this.c.height = Math.max(1, Math.round(r.height * this.dpr));
+  }
+
+  reset() { this.zoom = 1; this.pan = [0, 0]; }
+
+  _fit() {
+    const d = this.data, W = this.c.width, H = this.c.height;
+    const m = (this.compact ? 10 : 22) * this.dpr;
+    const base = Math.min((W - 2 * m) / d.W, (H - 2 * m) / d.H);
+    const scale = base * this.zoom;
+    return { scale, ox: (W - d.W * scale) / 2 + this.pan[0], oy: (H - d.H * scale) / 2 + this.pan[1] };
+  }
+
+  draw(st) {
+    const ctx = this.c.getContext("2d");
+    ctx.clearRect(0, 0, this.c.width, this.c.height);
+    if (!this.c.width) return;
+    let view = this._fit();
+    if (DEBUG_HEADING_UP && st.pose) {
+      // debugging only: rotate the map so that the heading points up
+      const [ix, iy] = this.data.toImg(st.pose.x, st.pose.z);
+      const cx = this.c.width / 2, cy = this.c.height / 2;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-Math.PI / 2 - this.data.screenAngle(st.pose.yaw));
+      ctx.translate(-cx, -cy);
+      view = { ...view, ox: cx - ix * view.scale, oy: cy - iy * view.scale };
+      this.data.draw(ctx, view, st, { dpr: this.dpr, compact: this.compact });
+      ctx.restore();
+    } else this.data.draw(ctx, view, st, { dpr: this.dpr, compact: this.compact });
+    this._north(ctx);
+  }
+
+  // small "N" badge: up on the plan
+  _north(ctx) {
+    const d = this.dpr, r = (this.compact ? 9 : 13) * d, x = this.c.width - r - (this.compact ? 7 : 14) * d, y = r + (this.compact ? 7 : 14) * d;
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.shadowColor = "rgba(0,0,0,0.15)";
+    ctx.shadowBlur = 3 * d;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = "#D9534F";
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 0.78);
+    ctx.lineTo(x - r * 0.3, y - r * 0.38);
+    ctx.lineTo(x + r * 0.3, y - r * 0.38);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = INK;
+    ctx.font = `750 ${r * 0.85}px Pretendard, system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("N", x, y + r * 0.16);
+  }
+
+  _bindGestures() {
+    const c = this.c, pts = new Map();
+    let last = null, pinch0 = 0, zoom0 = 1;
+    const clampZoom = (z) => Math.min(5, Math.max(1, z));
+    const zoomAt = (z, cx, cy) => {
+      const nz = clampZoom(z), k = nz / this.zoom;
+      const W = c.width / 2, H = c.height / 2;
+      this.pan = [(this.pan[0] - (cx - W)) * k + (cx - W), (this.pan[1] - (cy - H)) * k + (cy - H)];
+      this.zoom = nz;
+      if (nz === 1) this.pan = [0, 0];
+    };
+    const dev = (e) => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * this.dpr, (e.clientY - r.top) * this.dpr]; };
+    c.addEventListener("pointerdown", (e) => {
+      c.setPointerCapture(e.pointerId);
+      pts.set(e.pointerId, dev(e));
+      if (pts.size === 1) { last = dev(e); this.moved = 0; }
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); zoom0 = this.zoom; }
+    });
+    c.addEventListener("pointermove", (e) => {
+      if (!pts.has(e.pointerId)) return;
+      const p = dev(e);
+      pts.set(e.pointerId, p);
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        zoomAt(zoom0 * (Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+        this.moved += 10;
+      } else if (last) {
+        this.pan[0] += p[0] - last[0];
+        this.pan[1] += p[1] - last[1];
+        this.moved += Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]);
+        last = p;
+      }
+    });
+    const up = (e) => { pts.delete(e.pointerId); if (pts.size === 0) last = null; else last = [...pts.values()][0]; };
+    c.addEventListener("pointerup", up);
+    c.addEventListener("pointercancel", up);
+    c.addEventListener("wheel", (e) => { e.preventDefault(); const [x, y] = dev(e); zoomAt(this.zoom * Math.exp(-e.deltaY * 0.002), x, y); this.moved += 10; }, { passive: false });
+  }
 }
