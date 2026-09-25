@@ -114,7 +114,15 @@ def looks_dual_fisheye(img: np.ndarray) -> bool:
         hh, ww = im.shape[:2]
         for patch in (im[:c, :c], im[:c, ww - c:], im[hh - c:, :c], im[hh - c:, ww - c:]):
             dark.append(float(patch.mean()) < 14 and float(patch.std()) < 10)
-    return sum(dark) >= 0.75 * len(dark)
+    if sum(dark) < 0.75 * len(dark):
+        return False
+    # a dark room's equirect also has dark corners. The top row of an equirect is ONE point (the zenith):
+    # nearly uniform. In dual fisheye the two circles touch the top edge at w/4 and 3w/4 (bright there)
+    # while the rest of the top row is black.
+    g = img.mean(2) if img.ndim == 3 else img
+    top = g[:max(2, h // 200)].mean(0)
+    touch = max(top[w // 4 - w // 40: w // 4 + w // 40].mean(), top[3 * w // 4 - w // 40: 3 * w // 4 + w // 40].mean())
+    return bool(touch > 25 and touch > 4 * (top[: w // 16].mean() + 1))
 
 
 def probe(inputs: list[Path]) -> dict:
@@ -149,12 +157,16 @@ def probe(inputs: list[Path]) -> dict:
                 layout = "dual-stream-fisheye"  # Insta360 X3/X4 .insv: one stream per lens
             elif m and f.suffix.lower() == ".insv":
                 layout = "insv-lens-" + m.group(1)  # ONE X / X2: _00_ front lens, _10_ back lens, separate files
+            elif spherical:  # Spherical Mapping side data = the camera app already stitched it
+                layout = "equirect"
             elif dfe:
                 layout = "dual-fisheye"
             elif v.get("width") and abs(v["width"] / v["height"] - 2) < 0.02:
                 layout = "equirect"
             else:
                 layout = "unknown"
+            if os.environ.get("PANO360_LAYOUT"):  # manual override (e.g. equirect)
+                layout = os.environ["PANO360_LAYOUT"]
             rec.update(layout=layout, spherical_metadata=spherical,
                        gyro_or_meta_streams=bool(rec["data_streams"]) or f.suffix.lower() == ".insv")
         out.append(rec)
@@ -346,7 +358,7 @@ def extract_selected(rec: dict, clip: int, sc: dict, idx: list[int], out: Path, 
 
 
 def frames_from_inputs(inputs: list[Path], out: Path, n_frames: int, fps: float, fov: float, width: int | None,
-                       max_seconds: float | None = None, pr: dict | None = None) -> dict:
+                       max_seconds: float | None = None, pr: dict | None = None, start: float = 0.0) -> dict:
     """probe -> per clip: score -> select -> extract. Frames per clip in proportion to distance moved."""
     pr = pr or probe(inputs)
     clips = [r for r in pr["files"] if r.get("layout") in ("equirect", "dual-fisheye", "dual-stream-fisheye", "insv-lens-00")]
@@ -356,9 +368,9 @@ def frames_from_inputs(inputs: list[Path], out: Path, n_frames: int, fps: float,
     for c, rec in enumerate(clips):
         if Path(rec["file"]).suffix.lower() in IMAGE_EXT:
             continue
-        t1 = min(rec["duration"], max_seconds) if max_seconds else None
+        t1 = min(rec["duration"], start + max_seconds) if max_seconds else None
         t = time.time()
-        scores[c] = score_clip(rec, fps, fov, t1=t1)
+        scores[c] = score_clip(rec, fps, fov, t0=start, t1=t1)
         log(f"clip {c} {rec['name']}: {len(scores[c]['sharp'])} samples scored in {time.time() - t:.0f}s")
     total = sum(float(np.sum(s["motion"])) for s in scores.values()) or 1
     for c, sc in scores.items():
@@ -427,9 +439,12 @@ def view_camera(pano_w: int) -> dict:
     return {"model": "SIMPLE_PINHOLE", "width": w, "height": h, "params": [f, w / 2, h / 2]}
 
 
-def render_views(pano_dir: Path, names: list[str], views_dir: Path, masks_dir: Path, workers: int = 4) -> dict:
-    """Every panorama -> len(VIEWS) pinhole images views/pano_camera<i>/<name> (+ SfM masks: each
-    panorama pixel is matched in the one view whose centre is closest)."""
+def render_views(pano_dir: Path, names: list[str], views_dir: Path, masks_dir: Path, workers: int = 4, sfm_dir: Path | None = None,
+                 sfm_max: int = 1600, clahe: bool = True) -> dict:
+    """Every panorama -> len(VIEWS) pinhole images views/pano_camera<i>/<name> at full angular resolution
+    (training), plus SfM copies in `sfm_dir` downscaled by an exact integer factor with local contrast
+    (CLAHE) so dark rooms still match, plus SfM masks at that size (each panorama pixel is matched in
+    the one view whose centre is closest)."""
     import cv2
     first = _imread(str(pano_dir / names[0]), cv2.IMREAD_REDUCED_COLOR_8)
     W = first.shape[1] * 8
@@ -451,9 +466,26 @@ def render_views(pano_dir: Path, names: list[str], views_dir: Path, masks_dir: P
         maps.append((u, v))
         closest = np.argmax(rp @ centres.T, 1) == i
         masks.append((closest.reshape(h, w) * 255).astype(np.uint8))
+    sfm_dir = sfm_dir or views_dir
+    k = max(1, int(math.ceil(w / sfm_max)))
+    while k > 1 and (w % k or h % k):
+        k -= 1
+    ws, hs = w // k, h // k
+    masks = [cv2.resize(m, (ws, hs), interpolation=cv2.INTER_NEAREST) for m in masks]
     for i in range(len(rots)):
         (views_dir / f"pano_camera{i}").mkdir(parents=True, exist_ok=True)
+        (sfm_dir / f"pano_camera{i}").mkdir(parents=True, exist_ok=True)
         (masks_dir / f"pano_camera{i}").mkdir(parents=True, exist_ok=True)
+    cl = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+
+    def sfm_copy(img):
+        if k > 1:
+            img = cv2.resize(img, (ws, hs), interpolation=cv2.INTER_AREA)
+        if clahe:
+            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+            lab[:, :, 0] = cl.apply(lab[:, :, 0])
+            img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        return img
 
     def one(name):
         pano = _imread(str(pano_dir / name), cv2.IMREAD_COLOR)
@@ -462,22 +494,266 @@ def render_views(pano_dir: Path, names: list[str], views_dir: Path, masks_dir: P
         for i, (u, v) in enumerate(maps):
             img = cv2.remap(pano, u, v, cv2.INTER_AREA if False else cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP)
             _imwrite(str(views_dir / f"pano_camera{i}" / name), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            if sfm_dir != views_dir:
+                _imwrite(str(sfm_dir / f"pano_camera{i}" / name), sfm_copy(img), [cv2.IMWRITE_JPEG_QUALITY, 95])
             _imwrite(str(masks_dir / f"pano_camera{i}" / f"{name}.png"), masks[i])
         return name, True
     with ThreadPoolExecutor(workers) as ex:
         res = dict(ex.map(one, names))
     bad = [n for n, ok in res.items() if not ok]
     return {"pano_size": [W, H], "camera": cam, "views": len(rots), "images": len(rots) * (len(names) - len(bad)), "skipped": bad,
-            "rotations": [r.tolist() for r in rots], "view_dirs": VIEWS, "hfov": HFOV, "vfov": VFOV}
+            "rotations": [r.tolist() for r in rots], "view_dirs": VIEWS, "hfov": HFOV, "vfov": VFOV,
+            "sfm_factor": k if sfm_dir != views_dir else 1,
+            "camera_sfm": {"model": "SIMPLE_PINHOLE", "width": ws, "height": hs, "params": [f / k, ws / 2, hs / 2]} if sfm_dir != views_dir else cam,
+            "sfm_clahe": clahe}
+
+
+# =========================================================================== person masks
+def person_masks(views_sfm: Path, masks_dir: Path, out_dir: Path, dilate_frac: float = 0.03, model: str | None = None,
+                 equirect: Path | None = None) -> dict:
+    """The photographer walks right next to the camera: segment people in every SfM view (YOLO
+    segmentation), dilate, then
+      * out_dir/pano_camera<i>/<name>.png   255 = person (SfM-view size)
+      * the SfM masks in masks_dir lose the person (no features on him)
+      * out_dir/person_frac.json            share of each view covered by people
+    Runs in PANO360_SEG_PYTHON (a python with ultralytics + torch; on the GPU server the main one)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    spec = out_dir / "seg_spec.json"
+    spec.write_text(json.dumps({"views": str(views_sfm), "masks": str(masks_dir), "out": str(out_dir), "dilate": dilate_frac,
+                                "equirect": str(equirect) if equirect else None,
+                                "model": model or os.environ.get("PANO360_SEG_MODEL", "yolo11x-seg.pt")}))
+    py = os.environ.get("PANO360_SEG_PYTHON") or sys.executable
+    t = time.time()
+    with open(out_dir / "seg.log", "w", encoding="utf-8") as lf:
+        r = subprocess.run([py, "-m", "splattour.pano360", "_seg", str(spec)], cwd=str(Path(__file__).resolve().parents[1]),
+                           stdout=lf, stderr=subprocess.STDOUT)
+    if r.returncode != 0:
+        raise RuntimeError("person segmentation failed: " + (out_dir / "seg.log").read_text(encoding="utf-8", errors="ignore")[-1200:])
+    res = json.loads((out_dir / "seg_result.json").read_text())
+    res["wall_seconds"] = round(time.time() - t)
+    return res
+
+
+def _seg_main(spec_path: str) -> None:
+    import cv2
+    import torch
+    from ultralytics import YOLO
+    sp = json.loads(Path(spec_path).read_text())
+    views, masks, out = Path(sp["views"]), Path(sp["masks"]), Path(sp["out"])
+    dev = 0 if torch.cuda.is_available() else "cpu"
+    wdir = Path(os.environ.get("PANO360_WEIGHTS", str(out.parent)))
+    wdir.mkdir(parents=True, exist_ok=True)
+    cwd = os.getcwd()
+    os.chdir(wdir)  # ultralytics downloads the weights into the working directory
+    try:
+        net = YOLO(sp["model"])
+    finally:
+        os.chdir(cwd)
+    files = sorted(views.rglob("*.jpg"))
+    frac = {}
+    t = time.time()
+    B = 16 if dev == 0 else 4
+    for i in range(0, len(files), B):
+        batch = files[i:i + B]
+        imgs = [_imread(f) for f in batch]
+        res = net.predict(imgs, classes=[0], conf=0.25, imgsz=1024, retina_masks=True, device=dev, verbose=False, half=dev == 0)
+        for f, im, r in zip(batch, imgs, res):
+            h, w = im.shape[:2]
+            m = np.zeros((h, w), np.uint8)
+            if r.masks is not None and len(r.masks):
+                mm = (r.masks.data.cpu().numpy() > 0.5).any(0).astype(np.uint8) * 255
+                m = cv2.resize(mm, (w, h), interpolation=cv2.INTER_NEAREST) if mm.shape != (h, w) else mm
+                k = max(3, int(sp["dilate"] * w) | 1)
+                m = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+            rel = f.relative_to(views).as_posix()
+            (out / Path(rel).parent).mkdir(parents=True, exist_ok=True)
+            _imwrite(out / (rel + ".png"), m)
+            sm = masks / (rel + ".png")
+            base = _imread(sm, cv2.IMREAD_GRAYSCALE)
+            if base is not None:
+                _imwrite(sm, np.where(m > 0, 0, base).astype(np.uint8))
+            frac[rel] = round(float((m > 0).mean()), 4)
+    (out / "person_frac.json").write_text(json.dumps(frac))
+    n_eq = 0
+    if sp.get("equirect"):
+        n_eq = _seg_down(net, dev, Path(sp["equirect"]), out, sp["dilate"])
+    v = np.array(list(frac.values()) or [0])
+    res = {"views": len(frac), "with_person": int((v > 0.001).sum()), "mean_person_frac": round(float(v.mean()), 4),
+           "views_over_40pct": int((v > 0.4).sum()), "device": str(dev), "model": sp["model"], "seconds": round(time.time() - t),
+           "equirect_masks": n_eq}
+    (out / "seg_result.json").write_text(json.dumps(res))
+    print(json.dumps(res))
+
+
+# looking down (mask-only views): the photographer's body and hands between the horizontal views and the nadir cap
+DOWN_VIEWS = [(y, -45.0) for y in (0, 90, 180, 270)] + [(y, -20.0) for y in (45, 135, 225, 315)]
+
+
+def _seg_down(net, dev, eq_dir: Path, out: Path, dilate: float, W: int = 1920, size: int = 1024) -> int:
+    """Per panorama: YOLO on 8 extra pinhole views (4 at -45 deg, 4 at -20 deg, 100 deg FOV) back-projected into
+    an equirect person mask out/equirect/<name>.png (W x W/2). Only for masks (these views are never trained on)."""
+    import cv2
+    H = W // 2
+    (out / "equirect").mkdir(parents=True, exist_ok=True)
+    fov = 100.0
+    f = size / (2 * np.tan(np.deg2rad(fov) / 2))
+    xs, ys = np.meshgrid(np.arange(size) + 0.5, np.arange(size) + 0.5)
+    rays = np.stack([(xs - size / 2) / f, (ys - size / 2) / f, np.ones_like(xs)], -1)
+    rays /= np.linalg.norm(rays, axis=-1, keepdims=True)
+    u_, v_ = np.meshgrid(np.arange(W) + 0.5, np.arange(H) + 0.5)
+    yaw_, pitch_ = (2 * u_ / W - 1) * np.pi, (1 - 2 * v_ / H) * np.pi / 2
+    d = np.stack([np.cos(pitch_) * np.sin(yaw_), -np.sin(pitch_), np.cos(pitch_) * np.cos(yaw_)], -1)
+    views = []
+    for yaw_deg, pitch_deg in DOWN_VIEWS:
+        pr, yr = np.deg2rad([-pitch_deg, -yaw_deg])
+        R = np.array([[1, 0, 0], [0, np.cos(pr), -np.sin(pr)], [0, np.sin(pr), np.cos(pr)]]) @ \
+            np.array([[np.cos(yr), 0, np.sin(yr)], [0, 1, 0], [-np.sin(yr), 0, np.cos(yr)]])
+        rp = rays @ R
+        u = ((1 + np.arctan2(rp[..., 0], rp[..., 2]) / np.pi) / 2 * W - 0.5).astype(np.float32)
+        v = ((1 + 2 / np.pi * np.arctan2(rp[..., 1], np.linalg.norm(rp[..., [0, 2]], axis=-1))) / 2 * H - 0.5).astype(np.float32)
+        c = d @ R.T
+        ok = c[..., 2] > 1e-3
+        bx = np.where(ok, c[..., 0] / np.maximum(c[..., 2], 1e-3) * f + size / 2 - 0.5, -1).astype(np.float32)
+        by = np.where(ok, c[..., 1] / np.maximum(c[..., 2], 1e-3) * f + size / 2 - 0.5, -1).astype(np.float32)
+        views.append((u, v, bx, by))
+    n = 0
+    for pano_p in sorted(eq_dir.glob("*.jpg")):
+        pano = _imread(pano_p)
+        if pano is None:
+            continue
+        pano = cv2.resize(pano, (W, H), interpolation=cv2.INTER_AREA)
+        imgs = [cv2.remap(pano, u, v, cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP) for u, v, _, _ in views]
+        res = net.predict(imgs, classes=[0], conf=0.25, imgsz=1024, retina_masks=True, device=dev, verbose=False)
+        acc = np.zeros((H, W), np.uint8)
+        for (u, v, bx, by), r in zip(views, res):
+            if r.masks is None or not len(r.masks):
+                continue
+            mm = ((r.masks.data.cpu().numpy() > 0.5).any(0) * 255).astype(np.uint8)
+            if mm.shape != (size, size):
+                mm = cv2.resize(mm, (size, size), interpolation=cv2.INTER_NEAREST)
+            acc = np.maximum(acc, cv2.remap(mm, bx, by, cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT))
+        k = max(3, int(dilate * W) | 1)
+        acc = cv2.dilate(acc, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+        _imwrite(out / "equirect" / (pano_p.name + ".png"), acc)
+        n += 1
+    return n
+
+
+def training_masks(dataset: Path, person_dir: Path, drop_over: float = 0.4) -> dict:
+    """Full-resolution loss masks for the trainer: dataset/masks/<image name>.png (255 = train on it,
+    0 = person). Views mostly covered by a person are left out of training (dataset/drop.json)."""
+    import cv2
+    frac = json.loads((person_dir / "person_frac.json").read_text())
+    out = dataset / "masks"
+    drop, n = [], 0
+    for img in sorted((dataset / "images").rglob("*.jpg")):
+        rel = img.relative_to(dataset / "images").as_posix()
+        if frac.get(rel, 0) > drop_over:
+            drop.append(rel)
+        pm = _imread(person_dir / (rel + ".png"), cv2.IMREAD_GRAYSCALE)
+        if pm is None or not pm.any():
+            continue
+        H, W = _imread(img, cv2.IMREAD_GRAYSCALE).shape[:2]
+        valid = np.where(cv2.resize(pm, (W, H), interpolation=cv2.INTER_NEAREST) > 0, 0, 255).astype(np.uint8)
+        (out / Path(rel).parent).mkdir(parents=True, exist_ok=True)
+        _imwrite(out / (rel + ".png"), valid)
+        n += 1
+    (dataset / "drop.json").write_text(json.dumps(drop))
+    return {"masked_images": n, "dropped_mostly_person": len(drop), "drop_over": drop_over}
+
+
+TRAIN_WRAPPER = r'''# pano360: gsplat simple_trainer with per-image loss masks (person) and a list of views left out
+import json, os, runpy, sys
+import numpy as np
+import torch
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from datasets import colmap as C
+import imageio.v2 as imageio
+MASKS = os.environ.get("PANO360_MASKS", "")
+DROP = set(json.load(open(os.environ["PANO360_DROP"]))) if os.environ.get("PANO360_DROP") and os.path.exists(os.environ["PANO360_DROP"]) else set()
+_init, _get = C.Dataset.__init__, C.Dataset.__getitem__
+def init(self, parser, split="train", *a, **k):
+    _init(self, parser, split, *a, **k)
+    if split == "train" and DROP:
+        keep = [i for i in self.indices if parser.image_names[i] not in DROP]
+        print(f"[pano360] training on {len(keep)} of {len(self.indices)} views (mostly-person views left out)", flush=True)
+        self.indices = np.array(keep)
+def get(self, item):
+    data = _get(self, item)
+    name = self.parser.image_names[self.indices[item]]
+    p = os.path.join(MASKS, name + ".png")
+    if MASKS and os.path.exists(p):
+        m = torch.from_numpy(imageio.imread(p) > 127)
+        if tuple(m.shape) == tuple(data["image"].shape[:2]):
+            if "mask" in data and data["mask"] is not None:
+                m = m & data["mask"]
+            data["mask"] = m
+            # gsplat zeroes the render where mask is False; zero the photo too so the person costs nothing
+            data["image"] = data["image"] * m[..., None]
+    return data
+C.Dataset.__init__, C.Dataset.__getitem__ = init, get
+sys.argv = ["simple_trainer.py"] + sys.argv[1:]
+runpy.run_path("simple_trainer.py", run_name="__main__")
+'''
+
+
+def train_masked(dataset: Path, out: Path, steps: int, cap_max: int, test_every: int, steps_scaler: int = 1, extra: list[str] | None = None,
+                 progress=None, workdir: Path = Path("/workspace")) -> dict:
+    """cloud.train_gsplat_local with the person masks: same setup script and trainer flags, but the
+    trainer is started through TRAIN_WRAPPER (per-image masks + dropped views)."""
+    import subprocess as sp
+
+    from .cloud import SETUP, _flag, local_trainer_args
+    out.mkdir(parents=True, exist_ok=True)
+    note = progress or (lambda d: None)
+    t0 = time.time()
+    setup = sp.run(["bash", "-lc", SETUP.replace("/workspace", str(workdir))], capture_output=True, text=True)
+    (out / "setup.log").write_text(setup.stdout + setup.stderr, encoding="utf-8")
+    if setup.returncode != 0:
+        raise RuntimeError("gsplat setup failed: " + (setup.stderr or setup.stdout)[-600:])
+    ex = workdir / "gsplat" / "examples"
+    (ex / "pano360_train.py").write_text(TRAIN_WRAPPER, encoding="utf-8")
+    help_text = sp.run(["python", "simple_trainer.py", "mcmc", "--help"], cwd=ex, capture_output=True, text=True).stdout
+    extra = [f for f in (extra or []) if _flag(help_text, f.partition("=")[0]) in help_text]
+    args = local_trainer_args(help_text, dataset, out, steps, cap_max, test_every, steps_scaler, extra)
+    args[1] = "pano360_train.py"
+    env = {**os.environ, "PANO360_MASKS": str(dataset / "masks"), "PANO360_DROP": str(dataset / "drop.json")}
+    t1 = time.time()
+    last = 0
+    with open(out / "train.log", "w", encoding="utf-8") as logf:
+        proc = sp.Popen(args, cwd=ex, stdout=sp.PIPE, stderr=sp.STDOUT, text=True, bufsize=1, env=env)
+        buf = ""
+        while True:
+            ch = proc.stdout.read(4096)
+            if not ch:
+                break
+            logf.write(ch)
+            buf = (buf + ch)[-8000:]
+            nums = [int(x) for x in re.findall(r"Step (\d+)", buf)]
+            if nums and max(nums) - last >= max(1, steps // 100):
+                last = max(nums)
+                note({"phase": "training", "step": last, "steps": steps})
+        proc.wait()
+    plys = sorted((out / "result" / "ply").glob("*.ply"), key=lambda p: p.stat().st_mtime)
+    if not plys:
+        raise RuntimeError(f"no .ply (exit {proc.returncode}), see {out / 'train.log'}")
+    info = {"backend": "gsplat-local+pano360-masks", "ply": str(plys[-1]), "steps": steps, "setup_seconds": round(t1 - t0),
+            "train_seconds": round(time.time() - t1), "command": " ".join(args), "extra": extra}
+    stats = sorted((out / "result" / "stats").glob("val_step*.json"))
+    if stats:
+        st = json.loads(stats[-1].read_text())
+        info.update(eval_psnr=st.get("psnr"), eval_ssim=st.get("ssim"), eval_lpips=st.get("lpips"), num_splats=st.get("num_GS"))
+    return info
 
 
 # =========================================================================== rig SfM (pycolmap)
 def rig_sfm(views_dir: Path, masks_dir: Path, work: Path, rig: dict, matcher: str = "sequential", mapper: str = "global",
-            max_image_size: int = 1600) -> dict:
+            max_image_size: int = 1600, views_hi: Path | None = None) -> dict:
     """Runs in the SfM python (pycolmap 4; on the GPU server the isolated venv, SPLATTOUR_SFM_PYTHON)."""
     work.mkdir(parents=True, exist_ok=True)
     spec = work / "rig_spec.json"
-    spec.write_text(json.dumps({"views": str(views_dir), "masks": str(masks_dir), "work": str(work), "rig": rig, "matcher": matcher,
+    spec.write_text(json.dumps({"views": str(views_dir), "views_hi": str(views_hi or views_dir), "masks": str(masks_dir), "work": str(work),
+                                "rig": rig, "matcher": matcher,
                                 "mapper": mapper, "max_image_size": max_image_size}))
     py = os.environ.get("SPLATTOUR_SFM_PYTHON") or sys.executable
     env = {**os.environ}
@@ -513,11 +789,12 @@ def _sfm_main(spec_path: str) -> None:
     import pycolmap
     sp = json.loads(Path(spec_path).read_text())
     views, masks, work = Path(sp["views"]), Path(sp["masks"]), Path(sp["work"])
+    views_hi = Path(sp.get("views_hi") or sp["views"])
     rig = sp["rig"]
     rots = [np.array(r) for r in rig["rotations"]]
     gpu = pycolmap.has_cuda
     dev = pycolmap.Device.cuda if gpu else pycolmap.Device.cpu
-    cam = rig["camera"]
+    cam = rig.get("camera_sfm") or rig["camera"]
     t = {}
     db = work / "database.db"
     if db.exists():
@@ -611,20 +888,39 @@ def _sfm_main(spec_path: str) -> None:
     dense = work / "dense"
     if dense.exists():
         shutil.rmtree(dense)
-    pycolmap.undistort_images(str(dense), str(model), str(views), output_type="COLMAP")
-    s = dense / "sparse"
-    (s / "0").mkdir(exist_ok=True)
-    for f in ("cameras.bin", "images.bin", "points3D.bin", "rigs.bin", "frames.bin"):
-        if (s / f).exists():
-            os.replace(s / f, s / "0" / f)
+    if views_hi != views:  # SfM ran on exact 1/k copies: scale the model to the full-resolution views
+        from .sfm import _hires_dataset
+        dropped = _hires_dataset(work, views_hi, dense)["dropped_cameras"]
+    else:
+        pycolmap.undistort_images(str(dense), str(model), str(views), output_type="COLMAP")
+        s = dense / "sparse"
+        (s / "0").mkdir(exist_ok=True)
+        for f in ("cameras.bin", "images.bin", "points3D.bin", "rigs.bin", "frames.bin"):
+            if (s / f).exists():
+                os.replace(s / f, s / "0" / f)
+        from .sfm import clean_model
+        dropped = clean_model(s / "0", work / "colmap.log")
     t["undistort"] = time.time() - t0
-    from .sfm import clean_model
-    dropped = clean_model(s / "0", work / "colmap.log")
+
+    def clip_of(nm):
+        mm = re.search(r"c(\d\d)", nm)
+        return mm.group(1) if mm else "?"
+    per_clip = {}
+    for nm in frames:
+        per_clip[clip_of(nm)] = per_clip.get(clip_of(nm), 0) + 1
+    model_clips = []  # which clips ended up in which model (connectivity between passes)
+    for r in sorted(recs.values(), key=lambda r: -r.num_reg_images()):
+        cc = {}
+        for im in r.images.values():
+            if im.name.startswith("pano_camera0/"):
+                cc[clip_of(im.name)] = cc.get(clip_of(im.name), 0) + 1
+        model_clips.append(cc)
     n_img = sum(1 for _ in views.rglob("*.jpg"))
     res = {"images": n_img, "registered_images": best.num_reg_images(), "registered_panos": len(frames), "models": sizes,
            "points": best.num_points3D(), "reproj_px": round(best.compute_mean_reprojection_error(), 3), "matcher": m, "mapper": sp["mapper"],
            "backend": f"pycolmap-{pycolmap.__version__}-{'cuda' if gpu else 'cpu'}", "dropped_cameras": dropped,
-           "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense)}
+           "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense),
+           "registered_panos_per_clip": per_clip, "models_by_clip": model_clips}
     (work / "pano_poses.json").write_text(json.dumps(frames))
     (work / "sfm_result.json").write_text(json.dumps(res))
     print(json.dumps(res))
@@ -667,7 +963,7 @@ def nadir_patch(img: np.ndarray, below_deg: float = 62.0, feather_deg: float = 8
 
 def build_nav(pano_dir: Path, frames: list[dict], poses: dict, tf: dict, out_dir: Path, spacing: float = 1.2,
               labels: dict | None = None, pano_clip: int | None = None, pano_width: int | None = None, nadir_deg: float = 62.0,
-              workers: int = 4) -> dict:
+              workers: int = 4, person_frac: dict | None = None, window: float = 0.35) -> dict:
     """Capture points every `spacing` m along the SfM path (+ one at every room change), exported as
     equirect panoramas with the nadir blurred, and nav.json nodes in the viewer world frame."""
     import cv2
@@ -695,16 +991,27 @@ def build_nav(pano_dir: Path, frames: list[dict], poses: dict, tf: dict, out_dir
     picked = []
     for clip in sorted({r["clip"] for r in rows}):
         seq = sorted([r for r in rows if r["clip"] == clip], key=lambda r: (r["t"] if r["t"] is not None else r["sample"]))
-        dist, prev = 0.0, None
+        dist, prev, cum = 0.0, None, 0.0
         for i, r in enumerate(seq):
             if prev is not None:
-                dist += float(np.linalg.norm((r["pos"] - prev["pos"])[[0, 2]]))
+                step = float(np.linalg.norm((r["pos"] - prev["pos"])[[0, 2]]))
+                dist += step
+                cum += step
+            r["cum"] = cum
             room_change = prev is not None and r["room"] != prev["room"]
             if not picked or picked[-1]["clip"] != clip or dist >= spacing or room_change or i == len(seq) - 1:
                 if not (i == len(seq) - 1 and dist < 0.4 * spacing and picked and picked[-1]["clip"] == clip):
                     picked.append(r)
                     dist = 0.0
             prev = r
+    if person_frac:  # capture points where the photographer covers the least (within +-window*spacing along the path, same room)
+        for k, r in enumerate(picked):
+            near = [q for q in rows if q["clip"] == r["clip"] and q["room"] == r["room"] and abs(q["cum"] - r["cum"]) <= window * spacing]
+            best = min(near, key=lambda q: person_frac.get(q["name"], 1.0))
+            if person_frac.get(best["name"], 1.0) < person_frac.get(r["name"], 1.0):
+                picked[k] = best
+        for r in picked:
+            r["personFrac"] = person_frac.get(r["name"])
     # ids, neighbours: consecutive along each clip, plus close points of other clips / loops
     for k, r in enumerate(picked):
         r["id"] = f"p{k + 1:02d}"
@@ -741,7 +1048,7 @@ def build_nav(pano_dir: Path, frames: list[dict], poses: dict, tf: dict, out_dir
         "rooms": [{"id": room_ids[n], "name": n} for n in rooms],
         "nodes": [{"id": r["id"], "room": room_ids[r["room"]], "position": [round(float(v), 3) for v in r["pos"]],
                    "imageYawDeg": round(r["yaw"], 1), "pano": f"pano/{r['id']}.jpg", "neighbors": sorted(nbr[r["id"]]),
-                   "source": {"frame": r["name"], "clip": r["clip"], "t": r["t"]}} for r in picked],
+                   "source": {"frame": r["name"], "clip": r["clip"], "t": r["t"], "personFrac": r.get("personFrac")}} for r in picked],
     }
     (out_dir / "nav.json").write_text(json.dumps(nav, ensure_ascii=False, indent=1), encoding="utf-8")
     path_len = sum(float(np.linalg.norm((b["pos"] - a["pos"])[[0, 2]])) for a, b in zip(rows[:-1], rows[1:]) if a["clip"] == b["clip"])
@@ -800,8 +1107,8 @@ def apply_space(nav_dir: Path, space: str) -> dict:
 def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float = 3.0, fov: float = 200.0, pano_width: int | None = None,
             max_seconds: float | None = None, matcher: str = "sequential", mapper: str = "global", sfm_side: int = 1600,
             spacing: float = 1.2, camera_height: float = 1.6, labels: dict | None = None, pano_clip: int | None = None,
-            nav_pano_width: int | None = None, workers: int = 4) -> dict:
-    """probe -> frames -> views -> rig SfM -> dataset (+ nav in the pre-training frame). Resumable."""
+            nav_pano_width: int | None = None, workers: int = 4, person: bool = True, start: float = 0.0) -> dict:
+    """probe -> frames -> views -> person masks -> rig SfM -> dataset. Resumable."""
     work.mkdir(parents=True, exist_ok=True)
     st_p = work / "pano360.json"
     st = json.loads(st_p.read_text(encoding="utf-8")) if st_p.exists() else {}
@@ -810,17 +1117,22 @@ def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float =
         st_p.write_text(json.dumps(st, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     if "frames" not in st:
         t = time.time()
-        fr = frames_from_inputs(inputs, work / "equirect", n_frames, fps, fov, pano_width, max_seconds)
+        fr = frames_from_inputs(inputs, work / "equirect", n_frames, fps, fov, pano_width, max_seconds, start=start)
         st.update(probe=fr.pop("probe"), frames=fr, t_frames=round(time.time() - t))
         save()
         log(f"{len(fr['frames'])} panoramas in {st['t_frames']}s")
     names = [f["name"] for f in st["frames"]["frames"]]
     if "views" not in st:
         t = time.time()
-        st["views"] = render_views(work / "equirect", names, work / "views", work / "masks", workers=workers)
+        st["views"] = render_views(work / "equirect", names, work / "views", work / "masks", workers=workers, sfm_dir=work / "views_sfm",
+                                   sfm_max=sfm_side)
         st["t_views"] = round(time.time() - t)
         save()
         log(f"{st['views']['images']} views {st['views']['camera']['width']}x{st['views']['camera']['height']} in {st['t_views']}s")
+    if "person" not in st and person:
+        st["person"] = person_masks(work / "views_sfm", work / "masks", work / "person", equirect=work / "equirect")
+        save()
+        log("person masks", st["person"])
     if "sfm" not in st:
         many_clips = len({f["clip"] for f in st["frames"]["frames"]}) > 1
         m = matcher
@@ -828,7 +1140,10 @@ def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float =
             m = "exhaustive" if len(names) <= 120 else m
             log("several clips and no vocabulary tree: clips are linked only where file order puts them next to each other"
                 if m == "sequential" else "several clips, small set: exhaustive matching")
-        st["sfm"] = rig_sfm(work / "views", work / "masks", work / "sfm", st["views"], matcher=m, mapper=mapper, max_image_size=sfm_side)
+        st["sfm"] = rig_sfm(work / "views_sfm", work / "masks", work / "sfm", st["views"], matcher=m, mapper=mapper, max_image_size=sfm_side,
+                            views_hi=work / "views")
+        if st.get("person"):
+            st["sfm"]["training_masks"] = training_masks(Path(st["sfm"]["dataset"]), work / "person")
         save()
         log("sfm", {k: st["sfm"][k] for k in ("registered_panos", "registered_images", "images", "points", "reproj_px", "models")})
     st["frames_n"] = len(names)
@@ -841,10 +1156,17 @@ def nav_stage(work: Path, scene_dir: Path | None, *, spacing: float, camera_heig
     st = json.loads((work / "pano360.json").read_text(encoding="utf-8"))
     tf = viewer_transform(Path(st["sfm"]["dataset"]), scene_dir, camera_height)
     poses = json.loads((work / "sfm" / "pano_poses.json").read_text())
-    if pano_clip is None and st["frames"]["clips"]:
+    if pano_clip is None and st["frames"]["clips"] and st.get("probe", {}).get("clips", {}).get("case") == "rig":
+        # cameras recorded together: the 360 condition uses ONE of them. Separate passes each cover
+        # their own rooms, so all of them give capture points.
         pano_clip = pick_pano_clip(st, poses, tf)
+    pf = None
+    if (work / "person" / "person_frac.json").exists():
+        from .pano360_fill import Scene, person_frac_equirect
+        pf = person_frac_equirect(Scene(work))
+        (work / "person" / "pano_person_frac.json").write_text(json.dumps(pf))
     res = build_nav(work / "equirect", st["frames"]["frames"], poses, tf, work / "nav", spacing=spacing, labels=labels,
-                    pano_clip=pano_clip, pano_width=nav_pano_width, workers=workers)
+                    pano_clip=pano_clip, pano_width=nav_pano_width, workers=workers, person_frac=pf)
     res.update(pano_clip=pano_clip, transform=tf["source"], scale=tf["s"])
     hs = [n["position"][1] for n in json.loads((work / "nav" / "nav.json").read_text(encoding="utf-8"))["nodes"]]
     if tf["s"] == 1.0 or not hs or not (0.5 * camera_height < float(np.median(hs)) < 1.5 * camera_height):
@@ -1037,25 +1359,30 @@ def remote() -> None:
         put(label="frames+views+sfm")
         workers = min(16, os.cpu_count() or 4)
         st = process([media], work, n_frames=o["n_frames"], fps=o["fps"], fov=o["fov"], pano_width=o.get("pano_width"),
-                     matcher=o["matcher"], mapper=o["mapper"], sfm_side=o["sfm_side"], workers=workers)
+                     matcher=o["matcher"], mapper=o["mapper"], sfm_side=o["sfm_side"], workers=workers, person=o.get("person", True))
         put(label="training", probe=st["probe"], frames={"n": st["frames_n"], "clips": st["frames"]["clips"]}, sfm=st["sfm"],
-            views={k: st["views"][k] for k in ("pano_size", "camera", "views", "images")})
+            views={k: st["views"][k] for k in ("pano_size", "camera", "views", "images")}, person=st.get("person"))
         from .build_tour import build_tour
-        from .cloud import train_gsplat_local
         from .run import export_web
         ds = Path(st["sfm"]["dataset"])
 
         def progress(d):
             if d.get("step") and d["step"] % max(1, o["steps"] // 10) < o["steps"] // 100 + 1:
                 put(label="training", progress=d)
-        info = train_gsplat_local(ds, work / "train", steps=o["steps"], cap_max=o["cap"], test_every=o["test_every"], progress=progress,
-                                  steps_scaler=o.get("steps_scaler", 1))
+        info = train_masked(ds, work / "train", steps=o["steps"], cap_max=o["cap"], test_every=o["test_every"], progress=progress,
+                            steps_scaler=o.get("steps_scaler", 1), extra=o.get("train_flags") or [])
         put(label="export", train={k: v for k, v in info.items() if k != "ply"})
         sdir = ROOT / "scenes" / name
         build_tour(ds / "sparse" / "0", Path(info["ply"]), sdir, title=o.get("title") or name, capture_height=o["camera_height"])
         web = export_web(sdir, mobile_max_splats=o.get("mobile_cap"))
         nav = nav_stage(work, sdir, spacing=o["spacing"], camera_height=o["camera_height"], labels=o.get("labels"),
                         pano_clip=o.get("pano_clip"), nav_pano_width=o.get("nav_pano_width"), workers=workers)
+        try:  # 360 panoramas without the photographer: real pixels from other frames, residual holes -> AI jobs
+            from .pano360_fill import main as fill_main
+            fill_main([str(work)])
+            nav["filled"] = True
+        except Exception as e:  # noqa: BLE001 — the unfilled panoramas are still there
+            nav["fill_error"] = str(e)[:300]
         put(label="archiving", web=web, nav=nav)
 
         def up(p: Path, k: str):
@@ -1066,9 +1393,12 @@ def remote() -> None:
         up(work / "nav" / "nav.json", "nav/nav.json")
         with ThreadPoolExecutor(16) as ex:
             list(ex.map(lambda p: up(p, f"nav/pano/{p.name}"), sorted((work / "nav" / "pano").glob("*.jpg"))))
+            fl = work / "nav_filled"
+            if fl.exists():
+                list(ex.map(lambda p: up(p, f"nav_filled/{p.relative_to(fl).as_posix()}"), sorted(x for x in fl.rglob("*") if x.is_file())))
         for f in (ds / "sparse" / "0").glob("*.bin"):
             up(f, f"sparse/{f.name}")
-        for f in ("pano360.json", "sfm/pano_poses.json", "sfm/sfm_stdout.log", "sfm/sfm_result.json"):
+        for f in ("pano360.json", "sfm/pano_poses.json", "sfm/sfm_stdout.log", "sfm/sfm_result.json", "person/person_frac.json", "person/seg.log"):
             up(work / f, f"work/{Path(f).name}")
         for f in (work / "train" / "result" / "stats").glob("*.json"):
             up(f, f"stats/{f.name}")
@@ -1130,7 +1460,7 @@ def fetch(name: str, space: str | None = None) -> dict:
 # =========================================================================== CLI
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m splattour.pano360", description=__doc__.split("\n\n")[0])
-    ap.add_argument("cmd", choices=["probe", "dry-run", "process", "nav", "relabel", "cloud", "status", "fetch", "balance", "remote", "_sfm"])
+    ap.add_argument("cmd", choices=["probe", "dry-run", "process", "nav", "relabel", "cloud", "status", "fetch", "balance", "remote", "_sfm", "_seg"])
     ap.add_argument("inputs", nargs="*", type=Path)
     ap.add_argument("--name", default="wolhajeong360")
     ap.add_argument("--title", default="월하정 (360 영상)")
@@ -1153,13 +1483,19 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--apply-space", help="fetch/nav: also write nav.json + pano/ into viewer/public/spaces/<space>/")
     ap.add_argument("--hours", type=float, default=6.0, help="cloud: the server removes itself after this long, whatever happens")
     ap.add_argument("--dry-run-cloud", action="store_true", help="cloud: print the plan/cost, rent nothing")
-    ap.add_argument("--seconds", type=float, help="use only the first N seconds of each clip")
+    ap.add_argument("--seconds", type=float, help="use only N seconds of each clip (from --start)")
+    ap.add_argument("--start", type=float, default=0.0, help="dry-run: start this many seconds into each clip")
+    ap.add_argument("--no-person-mask", action="store_true", help="skip person segmentation (SfM + training masks)")
+    ap.add_argument("--train-flags", default="app_opt", help='gsplat flags; default "app_opt" = per-image exposure/appearance '
+                    '(clips with very different brightness); "" = none')
     ap.add_argument("--work", type=Path)
     a = ap.parse_args(argv)
     labels = json.loads(a.labels.read_text(encoding="utf-8")) if a.labels else None
     work = a.work or ROOT / "data" / "pano360" / a.name
     if a.cmd == "_sfm":
         return _sfm_main(str(a.inputs[0]))
+    if a.cmd == "_seg":
+        return _seg_main(str(a.inputs[0]))
     if a.cmd == "remote":
         return remote()
     if a.cmd == "probe":
@@ -1174,15 +1510,17 @@ def main(argv: list[str] | None = None) -> None:
         dry = a.cmd == "dry-run"
         if dry:
             work = a.work or ROOT / "data" / "pano360" / f"{a.name}-dry"
-        st = process(a.inputs, work, n_frames=20 if dry else a.frames, fps=a.fps, fov=a.fov,
+        st = process(a.inputs, work, n_frames=(a.frames if a.frames != 300 else 20) if dry else a.frames, fps=a.fps, fov=a.fov,
                      pano_width=(a.pano_width or 1920) if dry else a.pano_width, max_seconds=a.seconds or (90 if dry else None),
-                     matcher=a.matcher if not dry else "sequential", mapper=a.mapper, sfm_side=a.sfm_side)
+                     matcher=a.matcher if not dry else "sequential", mapper=a.mapper, sfm_side=a.sfm_side, person=not a.no_person_mask,
+                     start=a.start)
         nav = nav_stage(work, ROOT / "scenes" / a.name if not dry else None, spacing=a.spacing, camera_height=a.camera_height, labels=labels,
                         pano_clip=a.pano_clip, nav_pano_width=a.nav_pano_width)
         if a.apply_space and not dry:
             nav["applied"] = apply_space(work / "nav", a.apply_space)
-        r = {"work": str(work), "clips": st["frames"]["clips"], "frames": st["frames_n"], "views": {k: st["views"][k] for k in ("pano_size", "camera", "images")},
-             "sfm": {k: st["sfm"].get(k) for k in ("registered_panos", "registered_images", "images", "points", "reproj_px", "models", "seconds", "backend")},
+        r = {"work": str(work), "clips": st["frames"]["clips"], "frames": st["frames_n"], "person": st.get("person"), "views": {k: st["views"][k] for k in ("pano_size", "camera", "images")},
+             "sfm": {k: st["sfm"].get(k) for k in ("registered_panos", "registered_images", "images", "points", "reproj_px", "models", "seconds", "backend",
+                                                  "registered_panos_per_clip", "models_by_clip", "training_masks")},
              "nav": nav}
         if dry:
             pw = max((c.get("width") or 0) for c in st["probe"]["files"]) or 5760
@@ -1224,7 +1562,8 @@ def main(argv: list[str] | None = None) -> None:
         opts = {"n_frames": a.frames, "fps": a.fps, "fov": a.fov, "pano_width": a.pano_width, "matcher": a.matcher, "mapper": a.mapper,
                 "sfm_side": a.sfm_side, "steps": a.steps, "cap": a.cap, "test_every": a.test_every, "spacing": a.spacing,
                 "camera_height": a.camera_height, "labels": labels, "pano_clip": a.pano_clip, "nav_pano_width": a.nav_pano_width,
-                "title": a.title, "mobile_cap": 1_500_000, "pano_w_guess": pw,
+                "title": a.title, "mobile_cap": 1_500_000, "pano_w_guess": pw, "person": not a.no_person_mask,
+                "train_flags": a.train_flags.split(),
                 "steps_scaler": a.steps // 30000 if a.steps > 30000 and a.steps % 30000 == 0 else 1}
         r = launch(a.name, files, opts, a.hours, dry_run=a.dry_run_cloud)
     print(json.dumps(r, ensure_ascii=False, indent=1, default=str))

@@ -18,8 +18,13 @@ APT=$!
 ( python -m venv /workspace/sfmenv && /workspace/sfmenv/bin/pip install -q "pycolmap-cuda12==4.2.0" numpy ) &
 SFM=$!
 python -m pip install -q boto3 opencv-python-headless scipy pillow requests || exit 1
+# person segmentation (the photographer walks next to the camera): its own env on top of the pod's torch
+( python -m venv --system-site-packages /workspace/segenv && /workspace/segenv/bin/pip install -q ultralytics ) &
+SEG=$!
 wait $SFM || { echo "[boot] pycolmap install failed"; exit 1; }
 wait $APT
+wait $SEG || echo "[boot] ultralytics install failed"
+export PANO360_SEG_PYTHON=/workspace/segenv/bin/python PANO360_WEIGHTS=/workspace/weights
 echo "[boot] installs done $(date -u)"
 export SPLATTOUR_SFM_PYTHON=/workspace/sfmenv/bin/python
 # vocabulary tree for photo matching, from our storage (a download from GitHub failed on a GPU host)
