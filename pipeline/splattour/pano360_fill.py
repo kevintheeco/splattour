@@ -320,13 +320,18 @@ def inpaint_jobs(pano_path: Path, residual: np.ndarray, out_dir: Path, pano_id: 
         size = int(np.clip(round(W0 / 360 * fov * 0.9), 512, 2048)) // 8 * 8
         U, V, f = persp_maps(W0, H0, yaw, pitch, fov, size)
         img = cv2.remap(pano, U, V, cv2.INTER_CUBIC, borderMode=cv2.BORDER_WRAP)
-        m = cv2.remap(((lab == r) * 255).astype(np.uint8), U, V, cv2.INTER_NEAREST, borderMode=cv2.BORDER_WRAP)
+        own = cv2.remap(((lab == r) * 255).astype(np.uint8), U, V, cv2.INTER_NEAREST, borderMode=cv2.BORDER_WRAP)
+        own = cv2.dilate(own, np.ones((9, 9), np.uint8))
+        # the inpainting mask covers EVERY hole pixel inside the crop (a neighbouring job's hole must not be
+        # used as context); only this job's own part is written back (<job>_own.png)
+        m = cv2.remap((residual * 255).astype(np.uint8), U, V, cv2.INTER_NEAREST, borderMode=cv2.BORDER_WRAP)
         m = cv2.dilate(m, np.ones((9, 9), np.uint8))
+        _imwrite(out_dir / f"{pano_id}_h{r:02d}_own.png", own)
         job = f"{pano_id}_h{r:02d}"
         _imwrite(out_dir / f"{job}.jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 95])
         _imwrite(out_dir / f"{job}_mask.png", m)
         x, y, w, h, area = [int(v) for v in stats[r]]
-        jobs.append({"job": job, "pano": pano_path.name, "image": f"{job}.jpg", "mask": f"{job}_mask.png",
+        jobs.append({"job": job, "pano": pano_path.name, "image": f"{job}.jpg", "mask": f"{job}_mask.png", "own_mask": f"{job}_own.png",
                      "view": {"yaw_deg": round(yaw, 3), "pitch_deg": round(pitch, 3), "hfov_deg": round(fov, 3), "vfov_deg": round(fov, 3),
                               "width": size, "height": size, "focal_px": round(f, 3),
                               "convention": "pano frame x right, y down, z = equirect centre column; yaw + to the right (u increases), "
@@ -337,34 +342,56 @@ def inpaint_jobs(pano_path: Path, residual: np.ndarray, out_dir: Path, pano_id: 
 
 
 def apply_inpaint(pano_path: Path, jobs: list[dict], job_dir: Path, out_path: Path) -> list[dict]:
-    """Put inpainted perspective crops (<job>_filled.jpg) back into the equirect panorama, inside the hole only
-    (feathered). Returns the log entries (file, bbox, method)."""
+    """Put inpainted perspective crops (<job>_filled.jpg) back into the equirect panorama, inside the hole only:
+    feathered edge, and the crop's brightness matched to the panorama on a ring just outside the hole.
+    Returns the log entries (file, bbox, method)."""
     import cv2
     pano = _imread(pano_path).astype(np.float32)
     H0, W0 = pano.shape[:2]
-    d = pix_dirs(W0, H0)
     done = []
     for j in jobs:
         fp = job_dir / j["result"].split(" ")[0]
         if not fp.exists():
             continue
+        side = job_dir / (Path(fp).stem + ".json")
+        method = json.loads(side.read_text())["method"] if side.exists() else "generative inpainting on a perspective crop"
         v = j["view"]
         img = _imread(fp)
         if img.shape[1] != v["width"]:
             img = cv2.resize(img, (v["width"], v["height"]), interpolation=cv2.INTER_CUBIC)
-        mask = _imread(job_dir / j["mask"], cv2.IMREAD_GRAYSCALE)
-        R = view_R(v["yaw_deg"], v["pitch_deg"])
-        c = d @ R.T
+        mask = _imread(job_dir / j.get("own_mask", j["mask"]), cv2.IMREAD_GRAYSCALE)
+        # only the equirect window the crop covers (bbox + margin; full width near the poles)
+        x, y, w, h = j["equirect_bbox_xywh"]
+        pad = int(0.6 * max(w, h)) + 32
+        y0, y1 = max(0, y - pad), min(H0, y + h + pad)
+        if w + 2 * pad > W0 // 2 or y0 < H0 // 8 or y1 > 7 * H0 // 8:
+            x0, x1 = 0, W0
+        else:
+            x0, x1 = x - pad, x + w + pad
+        cols = np.arange(x0, x1) % W0
+        u_, v_ = np.meshgrid(cols + 0.5, np.arange(y0, y1) + 0.5)
+        yaw, pitch = (2 * u_ / W0 - 1) * np.pi, (1 - 2 * v_ / H0) * np.pi / 2
+        d = np.stack([np.cos(pitch) * np.sin(yaw), -np.sin(pitch), np.cos(pitch) * np.cos(yaw)], -1)
+        c = d @ view_R(v["yaw_deg"], v["pitch_deg"]).T
         ok = c[..., 2] > 1e-3
         f = v["focal_px"]
-        x = np.where(ok, c[..., 0] / np.maximum(c[..., 2], 1e-3) * f + v["width"] / 2 - 0.5, -1).astype(np.float32)
-        y = np.where(ok, c[..., 1] / np.maximum(c[..., 2], 1e-3) * f + v["height"] / 2 - 0.5, -1).astype(np.float32)
-        samp = cv2.remap(img, x, y, cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT).astype(np.float32)
-        mk = cv2.remap(mask, x, y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT).astype(np.float32) / 255
-        mk = cv2.GaussianBlur(mk, (0, 0), 2)[..., None]
-        pano = pano * (1 - mk) + samp * mk
+        xs = np.where(ok, c[..., 0] / np.maximum(c[..., 2], 1e-3) * f + v["width"] / 2 - 0.5, -1).astype(np.float32)
+        ys = np.where(ok, c[..., 1] / np.maximum(c[..., 2], 1e-3) * f + v["height"] / 2 - 0.5, -1).astype(np.float32)
+        samp = cv2.remap(img, xs, ys, cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT).astype(np.float32)
+        mk = cv2.remap(mask, xs, ys, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT).astype(np.float32) / 255
+        win = pano[y0:y1][:, cols]
+        # exposure: per-channel gain from a ring just outside the hole (panorama vs. the crop there)
+        hard = mk > 0.5
+        ring = cv2.dilate(hard.astype(np.uint8), np.ones((15, 15), np.uint8)).astype(bool) & ~hard & (xs >= 0)
+        gain = np.ones(3, np.float32)
+        if ring.sum() > 100:
+            gain = np.clip(np.median(win[ring], 0) / np.maximum(np.median(samp[ring], 0), 1), 0.7, 1.4)
+        a = cv2.GaussianBlur(mk, (0, 0), max(1.5, 0.004 * W0 / 4))[..., None] * (mk[..., None] > 0.02)
+        win = win * (1 - a) + samp * gain * a
+        pano[y0:y1, cols] = win
         done.append({"job": j["job"], "pano": j["pano"], "equirect_bbox_xywh": j["equirect_bbox_xywh"], "hole_px": j["hole_px"],
-                     "method": "generative inpainting (Higgsfield) on a perspective crop, reprojected", "source_file": fp.name})
+                     "view": v, "method": method, "exposure_gain": [round(float(g), 3) for g in gain], "source_file": fp.name,
+                     "at": time.strftime("%Y-%m-%dT%H:%M:%S")})
     _imwrite(out_path, np.clip(pano, 0, 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 94])
     return done
 
@@ -531,7 +558,12 @@ def fill_one_v2(sc: "Scene", name: str, out_dir: Path, dc: DepthCache, max_sourc
         rr = ring & valid
         gain = np.ones(3, np.float32)
         if rr.sum() > 500:
-            gain = np.clip(np.median(pano[rr].astype(np.float32), 0) / np.maximum(np.median(samp[rr], 0), 1), 0.25, 4.0)
+            gain = np.median(pano[rr].astype(np.float32), 0) / np.maximum(np.median(samp[rr], 0), 1)
+            # a source that needs a colour-unbalanced or extreme correction is looking at something else there
+            # (wrong depth through glass, another object, a missed person): do not use it
+            if gain.max() / max(gain.min(), 1e-3) > 1.6 or gain.min() < 0.3 or gain.max() > 3.5:
+                used.append({"frame": q, "t": f["t"], "pixels": 0, "rejected": "gain", "gain": [round(float(g), 3) for g in gain]})
+                continue
         samp *= gain
         new = hole & valid & ~have
         both = hole & valid & have & ~checked
@@ -605,17 +637,21 @@ def main(argv=None):
     ap.add_argument("--apply", action="store_true", help="put the inpainted crops (<job>_filled.jpg) back into the filled panoramas")
     a = ap.parse_args(argv)
     if a.apply:
-        out = a.out or a.work / "nav_filled"
+        out = a.out or a.work / ("nav_filled" if not a.model else f"nav_filled_m{a.model}")
         man = json.loads((out / "inpaint_jobs.json").read_text(encoding="utf-8"))
         by = {}
         for j in man["jobs"]:
             by.setdefault(j["pano"], []).append(j)
         logs = []
         for pano, jobs in by.items():
-            logs += apply_inpaint(out / pano, jobs, out / "inpaint_jobs", out / pano)
-        lp = out / "ai_fill_log.json"
-        old = json.loads(lp.read_text(encoding="utf-8")) if lp.exists() else []
-        lp.write_text(json.dumps(old + logs, ensure_ascii=False, indent=1), encoding="utf-8")
+            pre = out / "before_ai" / pano  # the real-pixel-only version, kept once
+            if not pre.exists():
+                pre.parent.mkdir(exist_ok=True)
+                import shutil
+                shutil.copyfile(out / pano, pre)
+            logs += apply_inpaint(pre, jobs, out / "inpaint_jobs", out / pano)
+        lp = out / "ai_fill_log.json"  # one entry per applied region (re-running --apply replaces the log)
+        lp.write_text(json.dumps(logs, ensure_ascii=False, indent=1), encoding="utf-8")
         print(json.dumps({"applied": len(logs)}))
         return
     sc = Scene(a.work, a.model)

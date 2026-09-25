@@ -156,3 +156,18 @@ clip 번호는 파일 이름순: 0 = `_0007`(앞마당 → 끝에 어두운 실�
 - 발밑 72° 아래는 부드러운 원(nadir disc)으로 덮음(다시 투영이 가장 부정확한 곳).
 - 결과: 채움 93% 실제 픽셀. 전후 비교: `data/pano360-test/fill2_c00_00045.jpg`, `fill2_c00_00009.jpg`, `fill2_c02_00022.jpg`, `fill2_c02_00012.jpg`.
 - 남은 문제: 선반·침대 가장자리의 늘어남/겹침(단안 깊이의 한계, 3DGS 깊이로 개선 가능), 손·막대 끝 작은 잔여물, 마당은 아직 시험 안 함(마당 3DGS 깊이 연동 미구현).
+
+### AI 채움 = LaMa (대표 승인 2026-09-26, Higgsfield 대신)
+- 모델: big-lama TorchScript, lama-cleaner/IOPaint가 받는 공개 배포본(Apache-2.0)
+  - 받은 곳: `https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt`
+  - md5 `e3aa4aaa15225a33ec84f9f4bc47e500` (lama-cleaner가 고정해 둔 값과 일치), sha256 `344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9`, 205,669,692 bytes
+  - 위치: `data/pano360/weights/big-lama.pt` (git 제외). 코드가 매번 md5를 확인한다.
+- 쓰는 곳: 실제 프레임으로 못 채운 곳 + 두 프레임이 어긋난 곳만(`inpaint_jobs`, 원근 사진 FOV ≤ 100°). 사진 안의 **모든** 구멍을 마스크로 줘서 옆 작업의 임시 채움이 문맥으로 쓰이지 않게 하고, 되돌려 넣을 때는 그 작업 몫(`_own.png`)만, 경계 페더 + 바깥 고리 기준 밝기 맞춤.
+- 기록: `nav_filled*/ai_fill_log.json` 항목마다 파노라마, 등장방형 bbox, 시점(yaw/pitch/FOV), 방법 `lama (...)`, 밝기 보정값, 시각. 실제 픽셀만 쓴 버전은 `nav_filled*/before_ai/`에 남는다.
+- 결과 받은 뒤 순서(노트북 CPU로 충분, 크롭 하나 2~4초):
+  ```
+  python -m splattour.pano360 fetch --name wolhajeong360
+  <segenv python> -m splattour.pano360_lama data/pano360/wolhajeong360/cloud/nav_filled
+  python -m splattour.pano360_fill data/pano360/wolhajeong360/cloud --out data/pano360/wolhajeong360/cloud/nav_filled --apply
+  (보조 모델: 폴더 nav_filled_m<k> 에 같은 두 줄)
+  ```
