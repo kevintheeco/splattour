@@ -240,8 +240,9 @@ async function main() {
     const g = walkMap.level(floorAt(to));
     const r = walkMap.route(g, from, to);
     if (!r) return null;
-    // eyes at each waypoint's floor + eye height (steps are smoothed by followFloor)
-    const pts = r.map(([x, z, h]) => new THREE.Vector3(x, (Number.isFinite(h) ? h : g.fy) + tour.eyeHeight, z));
+    // eyes stay at the start height along the curve: followFloor raises or
+    // lowers them only where the floor underfoot actually changes
+    const pts = r.map(([x, z]) => new THREE.Vector3(x, from.y, z));
     pts[0] = from.clone();
     const last = pts[pts.length - 1];
     if (Math.hypot(last.x - to.x, last.z - to.z) < 0.02) last.y = to.y;
@@ -911,16 +912,21 @@ async function main() {
     if (!Number.isFinite(h)) { if (stepper.active) p.y = stepper.last; return; }
     const target = h + tour.eyeHeight;
     // a jump (capture point, task start): take the new place as it is
-    if (stepper.goal === null || moved > 0.5) { stepper.goal = target; stepper.anim = null; stepper.active = false; stepper.last = p.y; return; }
+    if (stepper.goal === null || moved > 0.5) { stepper.goal = target; stepper.anim = null; stepper.active = false; stepper.last = p.y; stepper.pin = p.y; return; }
     if (Math.abs(target - stepper.goal) > 0.04) {
-      const from = stepper.active ? stepper.last : p.y;
+      const from = stepper.active ? stepper.last : stepper.pin; // what is on screen now
       const d = target - from;
       stepper.anim = { from, to: target, t: 0, dur: THREE.MathUtils.clamp(0.25 + (0.1 * Math.abs(d)) / 0.65, 0.25, 0.35), bob: Math.sign(d) * Math.min(1, Math.abs(d) / 0.3) * 0.02 };
       stepper.goal = target;
       stepper.active = true;
       window.__steps?.push({ t: performance.now(), from: +from.toFixed(3), to: +target.toFixed(3) });
     }
-    if (!stepper.active) return;
+    if (!stepper.active) {
+      // the walking route's curve blends waypoint heights (it would drift up
+      // long before the step): until the floor underfoot changes, stay level
+      if (nav.flight?.profile) p.y = stepper.pin;
+      return;
+    }
     let y = stepper.goal;
     const a = stepper.anim;
     if (a) {
