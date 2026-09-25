@@ -1454,6 +1454,46 @@ def launch(name: str, files: list[dict], opts: dict, hours: float, dry_run: bool
     return rec
 
 
+def parallel_download(files: list[dict], media: Path, conc: int = 40, chunk: int = 32 << 20) -> dict:
+    """R2 -> disk with `conc` ranged GETs in flight across all files, each range retried (8x, backoff) on its own."""
+    import boto3
+    from botocore.config import Config
+
+    from .inbox import BUCKET
+    s3 = boto3.client("s3", endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+                      aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"], aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+                      region_name="auto", config=Config(retries={"max_attempts": 3, "mode": "standard"}, max_pool_connections=conc + 4,
+                                                        read_timeout=120, connect_timeout=30))
+    jobs = []
+    for f in files:
+        dst = media / (f["name"] + ".part")
+        with open(dst, "wb") as fh:
+            fh.truncate(f["size"])
+        jobs += [(f, dst, a, min(f["size"], a + chunk) - 1) for a in range(0, f["size"], chunk)]
+    retries = [0]
+
+    def one(j):
+        f, dst, a, b = j
+        for k in range(8):
+            try:
+                body = s3.get_object(Bucket=BUCKET, Key=f["key"], Range=f"bytes={a}-{b}")["Body"].read()
+                if len(body) != b - a + 1:
+                    raise IOError(f"short read {len(body)}")
+                with open(dst, "r+b") as fh:  # own handle per range (portable; os.pwrite is POSIX-only)
+                    fh.seek(a)
+                    fh.write(body)
+                return
+            except Exception:  # noqa: BLE001
+                retries[0] += 1
+                time.sleep(min(30, 2 ** k))
+        raise RuntimeError(f"download failed: {f['key']} bytes {a}-{b}")
+    with ThreadPoolExecutor(conc) as ex:
+        list(ex.map(one, jobs))
+    for f in files:
+        os.replace(media / (f["name"] + ".part"), media / f["name"])
+    return {"connections": conc, "chunks": len(jobs), "retries": retries[0]}
+
+
 def remote() -> None:
     """ON the GPU server: raw files from R2 -> process -> gsplat -> tour/web files -> nav -> archive
     under cloud/pano360/<name>/ -> remove the server (cloudjob.shutdown: ledger + pod delete)."""
@@ -1477,19 +1517,15 @@ def remote() -> None:
         media = work / "media"
         media.mkdir(parents=True, exist_ok=True)
         put(label="downloading")
-        from boto3.s3.transfer import TransferConfig
         # the bucket is in APAC and GPU hosts are mostly in the US/EU: one connection gets ~0.2 MB/s (latency-bound),
-        # so all files at once, many ranged connections each (first run: 24 GB at 2.8 MB/s = 1.5 h with 16 on one file)
-        conc = int(os.environ.get("PANO360_DL_CONC", 48))
-        cfg = TransferConfig(multipart_threshold=16 << 20, multipart_chunksize=16 << 20, max_concurrency=conc)
+        # so many ranged GETs at once, each retried on its own (144 boto3 connections at once were cut by R2 with SSL EOF)
         todo = [f for f in man["files"] if f["name"] not in set(o.get("exclude") or [])
                 and not ((media / f["name"]).exists() and (media / f["name"]).stat().st_size == f["size"])]
         t_dl = time.time()
-        with ThreadPoolExecutor(max(1, len(todo))) as ex:
-            list(ex.map(lambda f: s3.download_file(BUCKET, f["key"], str(media / f["name"]), Config=cfg), todo))
+        conc = int(os.environ.get("PANO360_DL_CONC", 40))
+        res["download"] = parallel_download(todo, media, conc)
         gb = sum(f["size"] for f in todo) / 1e9
-        res["download"] = {"gb": round(gb, 2), "seconds": round(time.time() - t_dl), "mb_s": round(gb * 1000 / max(1, time.time() - t_dl), 1),
-                           "connections": conc * len(todo)}
+        res["download"].update(gb=round(gb, 2), seconds=round(time.time() - t_dl), mb_s=round(gb * 1000 / max(1, time.time() - t_dl), 1))
         log("download", res["download"])
         put(label="frames+views+sfm")
         workers = min(16, os.cpu_count() or 4)

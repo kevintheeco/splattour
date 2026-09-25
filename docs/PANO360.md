@@ -219,7 +219,7 @@ clip 번호는 파일 이름순: 0 = `_0007`(앞마당 → 끝에 어두운 실�
 - **SfM 짝**: 첫 실행 자세로 1.2 m 안의 다른 클립/다른 바퀴 파노라마 4개씩, 보는 방향이 50° 안인 사진끼리만 `match_image_pairs`(어휘 트리 루프 검출은 GPU 서버에서 죽었음).
 - **사람 마스크**: 분할 확신도 0.08 + 덩어리마다 볼록 껍질 + 같은 클립 앞뒤 1장과 합집합(`refine_person_masks`), 학습 손실에서 제외, 40% 넘게 가린 사진은 학습에서 뺌.
 - **학습**: 월하정 게시본과 같은 방식(MCMC 500만, 60k = 30k×steps_scaler 2, antialiased, 정규화 자동 = 0.01·300/사진수, bilateral grid·app_opt 없음), 8장마다 1장 시험용.
-- 다운로드: 버킷이 APAC, GPU 서버는 주로 미국·유럽 → 연결 하나가 느림. 파일 3개 동시 × 연결 48개(16 MB 조각)로 받고 속도를 `result.json`의 `download`에 남김.
+- 다운로드: 버킷이 APAC, GPU 서버는 주로 미국·유럽 → 연결 하나가 느림. 첫 시도(pod 4webljp4jz3np5, boto3 연결 144개)는 R2가 SSL을 끊어 5분 만에 실패($0.07). 지금은 `parallel_download`: 32 MB 구간 GET 40개 동시, 구간마다 8번까지 재시도, 속도·재시도 수를 `result.json`의 `download`에 남김. 두 번째 실행 pod e2pxahr4m3cyrw (L40 $0.82/h).
 - 360 지점·채우기는 학습과 동시에(`--nav-parallel`), 모든 클립에서(이제 passes로 판정).
 - R2: `cloud/pano360/wolhajeong360-hq/`(공개 목록에는 넣지 않음, 링크 전용 `/tour.html?scene=wolhajeong360-hq&from=cloud`).
 
