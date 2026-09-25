@@ -204,5 +204,31 @@
     "n9"
    ]
   }
+ ],
+ "doorFx": {
+  "duration": 0.9,
+  "sound": true,
+  "note": "문 여는 연출: 두 조건 공통(같은 문, 같은 0.9초, 같은 소리). sound=false 또는 주소 &doorsound=0 으로 소리 끔."
+ },
+ "doors": [
+  {
+   "id": "d-gate",
+   "name": "대문간–앞마당 문",
+   "fromRoom": "gate",
+   "toRoom": "yard",
+   "position": [
+    0.058,
+    0.1,
+    1.707
+   ],
+   "yaw": -119.2,
+   "width": 0.96,
+   "height": 2.1,
+   "style": "hanok-double",
+   "pattern": "planks",
+   "open": "swing-in",
+   "draft": true,
+   "note": "TEST 초안(2026-09-26): 대문간(어두운 통로)이 앞마당으로 열리는 개구부(노란 벽 모서리~타일 벽 쪽 화분 앞, 폭 약 0.96 m)에 둔 연출용 널판문. 실제 대문(짙은 나무 쌍여닫이, 촬영 때 닫혀 있음)은 통로 거리 쪽 끝에 있어 탐색 범위 밖이다. 실제 문 사진(texture)과 정확한 위치로 바꿔야 한다."
+  }
  ]
 }

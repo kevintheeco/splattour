@@ -1,6 +1,6 @@
 {
  "version": 1,
- "about": "촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도).",
+ "about": "TEST 전용: drjohnson을 식당 문에서 두 모델로 자른 분할 테스트(scripts/split-scene-test.mjs). 방별 모델 포털 경로 검증용. 실험에 쓰지 않는다. 촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도).",
  "status": {
   "ready": true,
   "devPlaceholder": true,
@@ -17,11 +17,27 @@
  "rooms": [
   {
    "id": "parlour",
-   "name": "응접실"
+   "name": "응접실",
+   "scene": "drjohnson-split-parlour"
   },
   {
    "id": "dining",
-   "name": "식당"
+   "name": "식당",
+   "scene": "drjohnson-split-dining",
+   "region": {
+    "center": [
+     5.2,
+     1.5,
+     -4.452
+    ],
+    "size": [
+     6,
+     5,
+     7
+    ],
+    "yaw": -63.1,
+    "note": "식당 모델이 그려지는 상자(문 평면에서 식당 쪽으로 7 m). 이 상자 안에서는 응접실 모델을 숨긴다."
+   }
   }
  ],
  "nodes": [

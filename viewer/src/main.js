@@ -772,7 +772,34 @@ async function main() {
   nav.addEventListener("depart", () => coach.did("move"));
   canvas.addEventListener("dblclick", () => coach.did("close"));
   canvas.addEventListener("wheel", () => coach.did("zoom"), { passive: true });
-  app?.start({ nav, look, rig, canvas, tour }).catch((e) => console.warn("[app]", e));
+  app?.start({ nav, look, rig, canvas, tour, scene, renderer, camera, occ, walkMap, splat, sceneName, loadScene: loadExtraScene }).catch((e) => console.warn("[app]", e));
+
+  // Another room's model in the same space frame (app/portals.js): loaded
+  // near a door to it, the same way as the first one (streamed tree + baked
+  // walls when the scene has them, else the file and walls built from it).
+  async function loadExtraScene(name) {
+    const base = new URL(`${cloudBase || ""}/scenes/${encodeURIComponent(name)}/`, location.href);
+    const t2 = await loadTour(base);
+    let s, o = null;
+    if (t2.splatMode === "lod" && t2.lod?.occupancy) {
+      s = new SplatMesh({ url: t2.splatUrl, paged: true });
+      applyTransform(s, t2.splatTransform);
+      s.opacity = 0;
+      scene.add(s);
+      const r = await fetch(t2.lod.occupancy);
+      if (!r.ok) throw new Error(`occupancy ${r.status}`);
+      o = Occupancy.fromBuffer(await r.arrayBuffer());
+    } else {
+      s = new SplatMesh({ url: t2.fallbackUrl || t2.splatUrl });
+      applyTransform(s, t2.splatTransform);
+      s.opacity = 0;
+      scene.add(s);
+      await s.initialized;
+      s.updateMatrixWorld(true);
+      o = new Occupancy(s, t2);
+    }
+    return { name, tour: t2, splat: s, occ: o };
+  }
 
   // Zoomed all the way in and still scrolling → step toward what is under the
   // cursor (a 3D scene can get closer, not just crop the picture).
@@ -850,6 +877,8 @@ async function main() {
     const p = rig.position;
     const nx = p.x + keyVel.x * dt, nz = p.z + keyVel.z * dt;
     // slide along obstacles: try the full step, then each axis alone
+    // a door whose other side is still loading stops the step (app/portals.js)
+    if (app?.stepBlocked?.(p.x, p.z, nx, nz)) { keyVel.set(0, 0, 0); return; }
     if (walkMap.canStand(g, nx, nz) || !walkMap.canStand(g, p.x, p.z)) { p.x = nx; p.z = nz; }
     else if (walkMap.canStand(g, nx, p.z)) { p.x = nx; keyVel.z = 0; }
     else if (walkMap.canStand(g, p.x, nz)) { p.z = nz; keyVel.x = 0; }
@@ -918,6 +947,7 @@ async function main() {
     }
 
     renderer.render(scene, camera);
+    app?.afterRender?.(); // reads a few pixels beside doors (brightness match), see app/appmode.js
     frames++;
     fpsT += dt;
     if (fpsT > 1) {

@@ -147,6 +147,8 @@ export class Navigator extends EventTarget {
     }
     const f = this.flight;
     if (!f) return;
+    // held at a closed door whose other side is still loading (app/portals.js)
+    if (this.hold) { this.speedNow = 0; return; }
     f.lastDt = dt;
     f.t = Math.min(f.t + dt / f.T, 1);
     let u;
@@ -159,6 +161,7 @@ export class Navigator extends EventTarget {
       // metres per second right now (derivative of smootherstep), for the comfort vignette
       this.speedNow = (30 * f.t * f.t * (1 - f.t) * (1 - f.t) * f.length) / f.T;
     }
+    f.u = u; // progress along the route (doors ahead, see app/appmode.js)
     this.rig.position.copy(f.curve.getPointAt(u));
 
     // Heading: look where the path goes (a point ~1.6 m ahead, so corners are

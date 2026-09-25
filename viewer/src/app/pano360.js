@@ -15,6 +15,7 @@ import { icon } from "./icons.js";
 import { ViewerChrome, matchLook } from "./chrome.js";
 import { TaskRunner } from "./tasks.js";
 import { createStudyLog, studyBadge, summarizeApp } from "./studylog.js";
+import { prepareDoors, DoorSet, DoorSound, doorsOnHop, jambPoints, summarizeSamples } from "../doors.js";
 import "./viewer.css";
 
 const params = new URLSearchParams(location.search);
@@ -77,7 +78,7 @@ const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 async function main() {
   const listing = await loadListing(spaceId);
-  const nav = await loadNav(spaceId, listing);
+  const nav = await loadNav(spaceId, listing, params.get("navfile"));
   document.title = `${listing.title} · 360° 시점 탐색`;
   const backHref = `/listing.html?id=${encodeURIComponent(spaceId)}`;
 
@@ -224,6 +225,55 @@ async function main() {
     return best;
   }
 
+  // ---------- doors between places (../doors.js) ----------
+  // The same door data, leaves, timing and sound as the 3DGS viewer, drawn at
+  // the same world position over the panorama (the eye is the capture point,
+  // so the root is moved by -eye). A hop through a door waits for it to open.
+  const { fx: doorFx, doors } = prepareDoors(nav, spaceBase(spaceId));
+  const doorRoot = new THREE.Group();
+  scene.add(doorRoot);
+  let doorSet = null;
+  const shownDoors = new Set();
+  // A door is drawn from capture points it can be seen from: near it, on a
+  // hop through it, or listed in its visibleFrom (the panorama has no depth to hide it behind walls).
+  function doorsFrom(node) {
+    shownDoors.clear();
+    if (!doorSet) return;
+    for (const d of doorSet.doors) {
+      const near = Math.hypot(node.position[0] - d.cx, node.position[2] - d.cz) < 2.0;
+      const listed = d.visibleFrom?.includes(node.id);
+      const onHop = node.neighbors.some((id) => { const o = nav.byId.get(id); return o && doorsOnHop([d], node, o).length; });
+      if (near || listed || onHop) shownDoors.add(d.id);
+    }
+  }
+  // brightness beside the doorway, read from the panorama itself
+  const panoPixels = new Map();
+  function panoSample(d, side) {
+    if (U.mixAB.value > 0) return null;
+    const t = U.texA.value, img = t?.image;
+    if (!img?.width) return null;
+    let px = panoPixels.get(t.uuid);
+    if (!px) {
+      const c = document.createElement("canvas");
+      c.width = 512; c.height = 256;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(img, 0, 0, 512, 256);
+      px = g.getImageData(0, 0, 512, 256).data;
+      panoPixels.set(t.uuid, px);
+      if (panoPixels.size > 6) panoPixels.delete(panoPixels.keys().next().value);
+    }
+    const eye = U.eye.value, got = [];
+    for (const p of jambPoints(d, side)) {
+      const v = p.sub(eye).normalize();
+      const yaw = Math.atan2(-v.x, -v.z), lat = Math.asin(THREE.MathUtils.clamp(v.y, -1, 1));
+      const u = (((0.5 + (U.yawA.value - yaw) / (2 * Math.PI)) % 1) + 1) % 1;
+      const col = Math.min(511, Math.floor(u * 512)), row = Math.min(255, Math.floor((0.5 - lat / Math.PI) * 256));
+      const i = (row * 512 + col) * 4;
+      got.push([px[i], px[i + 1], px[i + 2]]);
+    }
+    return summarizeSamples(got);
+  }
+
   // ---------- state, moving ----------
   let current = null;
   let busy = false;
@@ -251,7 +301,10 @@ async function main() {
     const from = current;
     study?.log("depart", { from: from.id, to: to.id });
     clearSpots();
-    const t = await tex(to);
+    // a door on the way opens first (the 3DGS walker opens it while walking up to it)
+    const hop = doorSet ? doorsOnHop(doorSet.doors, from, to) : [];
+    for (const h of hop) shownDoors.add(h.door.id);
+    const [t] = await Promise.all([tex(to), ...hop.map((h) => doorSet.openFor(h.door.id, "hop"))]);
     const dist = Math.hypot(to.position[0] - from.position[0], to.position[2] - from.position[2]);
     U.texB.value = t;
     U.yawB.value = yawOfNode(to);
@@ -267,6 +320,7 @@ async function main() {
     U.warp.value = 0;
     look.fovKick = 0;
     busy = false;
+    for (const h of hop) doorSet.release(h.door.id); // closes behind you, as in 3DGS
     arrive(to);
     for (const id of to.neighbors) { const n = nav.byId.get(id); if (n) tex(n); } // warm the next hop
   }
@@ -290,6 +344,7 @@ async function main() {
   let lastRoom = null;
   function arrive(node) {
     current = node;
+    doorsFrom(node);
     showSpots(node);
     chrome.setRoom(nav.roomName(node.room), node.room);
     const u = new URL(location.href);
@@ -348,6 +403,16 @@ async function main() {
     window.__study = { log: study.log, summarize: () => summarizeApp(study.all), all: study.all };
   }
 
+  if (doors.length) {
+    const ds = params.get("doorsound");
+    const soundOn = ds != null ? ds !== "0" : doorFx.sound !== false;
+    renderer.localClippingEnabled = true; // sliding leaves are cut at the jambs
+    doorSet = new DoorSet({ doors, fx: doorFx, parent: doorRoot, log: (e, d) => study?.log(e, d), sound: new DoorSound(soundOn), sample: panoSample });
+    // over the panorama sphere, under the hotspot discs
+    doorRoot.traverse((o) => { if (o.isMesh) o.renderOrder = 1; });
+    study?.log("doors", { n: doors.length, ids: doors.map((d) => d.id), sound: soundOn, duration: doorFx.duration });
+  }
+
   let runner = null;
   const tasks = STUDY || params.get("tasks") === "1" ? await loadTasks(spaceId, listing) : [];
   const next = params.get("next");
@@ -386,6 +451,11 @@ async function main() {
     look.update(dt);
     stepFade(dt);
     projectSpots(dt);
+    if (doorSet && current) {
+      doorRoot.position.copy(U.eye.value).negate();
+      for (const it of doorSet.items) it.g.visible = shownDoors.has(it.d.id);
+      doorSet.update(dt, { eye: U.eye.value, camYaw: look.yaw, camera });
+    }
     if (current) chrome.setPose(U.eye.value.x, U.eye.value.z, look.yaw);
     renderer.render(scene, camera);
   });
@@ -396,7 +466,7 @@ async function main() {
   });
 
   // automation hooks (scripts/app-check.mjs)
-  window.pano360 = { nav, look, go: (id) => go(nav.byId.get(id)), get current() { return current; }, get busy() { return busy; }, chrome, runner };
+  window.pano360 = { nav, look, go: (id) => go(nav.byId.get(id)), get current() { return current; }, get busy() { return busy; }, chrome, runner, doors: doorSet, U, place: (id, yaw) => place(nav.byId.get(id), { yaw }) };
 }
 
 // Clearly a placeholder: a grid sphere with the room name and a banner.

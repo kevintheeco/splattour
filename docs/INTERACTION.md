@@ -97,3 +97,61 @@
 | `scripts/coach-check.mjs <scene>` | 첫 진입 안내 3단계 진행과 재방문 기록 |
 | `scripts/mobile-check.mjs <scene>` | 휴대폰 화면 배치·터치 문구 |
 | `scripts/light-demo.mjs <scene> …` | 낮·저녁·밤·조명 끄기 화면 |
+
+---
+
+## 6. 문 여는 연출 (장소와 장소 사이, 2026-09-26)
+
+### 6-1. 무엇 / 왜
+- **무엇**: 앞마당 → 사랑방처럼 장소가 바뀌는 곳에 실제 문 위치에 문짝을 세워 두고, 지나갈 때 문이 부드럽게 열렸다가(0.9초, 천천히 시작해 천천히 멈춤) 지나간 뒤 다시 닫힌다. 문 여는 소리(나무 삐걱임·걸쇠, 작게)가 난다.
+- **왜**: 장소 사이의 연결을 실제처럼, 직관적으로 느끼게 하려는 것(대표 요청). "문을 지나 다른 방에 들어섰다"는 경계가 분명해진다.
+- **두 조건 동일**: 같은 문 데이터, 같은 문짝 모양, 같은 0.9초, 같은 소리, 같은 기록. 다른 것은 "지나가려 한다"를 알아채는 방법뿐이다.
+  - 3DGS 자유 시점 탐색: 걷는 경로(A*)가 문을 지나가면 문까지 1.6 m 남았을 때 열린다(1.2 m/s로 약 1.3초 전, 열림 0.9초). 키보드로 문을 향해 걸으면 1.4 m 안에서 열린다. 문간(문 평면 0.6 m 안)에 서 있으면 계속 열려 있다. 지나가서 멀어지면 0.7초 뒤 닫힌다.
+  - 360° 시점 탐색: 핫스팟 이동이 문을 지나가면(두 촬영 지점을 잇는 선이 문간을 지나거나, 문이 잇는 두 방 사이의 이동이 문 평면을 지나면) 먼저 문이 열리고(0.9초) 평소 전환이 이어진다. 문은 파노라마 구 안의 **같은 세계 좌표**에 그려져, 전환 중 시점이 움직이면 문도 제자리에서 지나간다. 도착 뒤 멀어지면 닫힌다.
+- **밝기**: 문짝이 소품처럼 떠 보이지 않도록 문 양옆 벽의 밝기와 색을 읽어 맞춘다(3DGS는 그린 화면에서, 360°는 파노라마 사진에서 같은 여섯 점).
+- **가림**: 3DGS에서는 문짝이 불투명 메시로 먼저 그려져 깊이를 쓰고, 그 뒤 스플랫이 깊이 비교로 그려진다. 닫힌 문 뒤의 방은 가려지고, 문 앞의 문틀·벽은 문 위에 그려진다. 360° 파노라마에는 깊이가 없으므로 문은 근처(2 m 안) 촬영 지점, 문을 지나는 핫스팟이 있는 지점, `visibleFrom`에 적은 지점에서만 보인다.
+- 코드: `viewer/src/doors.js`(데이터·문짝·애니메이션·소리, 두 조건 공용), `viewer/src/app/appmode.js`(3DGS), `viewer/src/app/pano360.js`(360°), `viewer/src/app/portals.js`(방별 모델).
+
+### 6-2. nav.json에 문 적기 (손으로 편집)
+```json
+"doorFx": { "duration": 0.9, "sound": true },
+"doors": [{
+  "id": "d-sarang", "name": "앞마당–사랑방 문",
+  "fromRoom": "yard", "toRoom": "sarang",
+  "position": [x, y, z],
+  "yaw": -119.2,
+  "width": 1.6, "height": 1.9,
+  "style": "hanok-double",
+  "open": "swing-out",
+  "texture": "doors/sarang-front.png",
+  "draft": true
+}]
+```
+| 칸 | 뜻 |
+|---|---|
+| `position` | 문간 **바닥 가운데**의 세계 좌표(m, nav.json 노드와 같은 좌표계) |
+| `yaw` | 문이 바라보는 방향(도). fromRoom에서 toRoom 쪽. 0 = −Z, +는 왼쪽으로 돌기 |
+| `width`, `height` | 문간(개구부) 폭·높이(m). 문짝은 이 크기로 만들어진다 |
+| `style` | `hanok-double`(쌍여닫이, 띠살+창호지) · `hanok-single`(외여닫이) · `sliding`(미닫이 두 짝) · `plain`(판문) |
+| `open` | `swing-in`(toRoom 쪽으로 열림) · `swing-out`(fromRoom 쪽) · `slide`(벽 속으로 밀려 들어감, 문설주에서 잘려 보임) |
+| `texture` | (선택) 실제 문 정면 사진(fromRoom 쪽에서 본 모습), 문간 크기로 잘라 문 밖은 투명(PNG 알파). 없으면 그린 문. `textureBack`은 뒷면 |
+| `pattern` | (선택) 그린 문 무늬: `ttisal`(띠살, 한옥 방문) · `planks`(널판, 대문) · `panelled`(도장 판문) |
+| 기타 | `leaves`(문짝 수), `hinge`(`left`/`right`, 외여닫이), `openAngle`(도, 기본 92), `light`(밝기 고정), `tint`(`#rrggbb` 나무색), `visibleFrom`(360°에서 보이는 촬영 지점 id 목록), `draft`(초안 표시) |
+- 소리 끄기: `doorFx.sound: false` 또는 주소에 `&doorsound=0`(두 조건에 같이 붙인다).
+
+### 6-3. 방마다 따로 만든 3DGS 모델 (포털)
+- 방을 따로 촬영해 모델이 여러 개가 되면 `rooms`에 모델 이름과 그 방이 차지하는 상자를 적는다. 모든 모델은 같은 공간 좌표계에 맞춰져 있어야 한다(각 tour.json의 `splatTransform`).
+```json
+{ "id": "sarang", "name": "사랑방", "scene": "wolhajeong-sarang",
+  "region": { "center": [x, y, z], "size": [가로, 높이, 깊이], "yaw": 도 } }
+```
+- 3DGS 뷰어는 두 방의 모델이 다른 문에서 6 m 안으로 다가가면 다음 방 모델을 미리 불러온다(한 번에 최대 두 개). 불러오면 **방 모델은 자기 상자 안에서만, 다른 모델은 그 상자 밖에서만** 그려져(Spark SplatEdit 상자, 경계 10 cm 부드럽게) 두 모델이 겹치지 않고 한 공간처럼 이어진다. 새 모델은 0.6초 동안 서서히 나타난다. 상자가 없으면 문 평면 앞뒤로 두 모델을 교차 페이드한다.
+- 다음 방이 아직 불러와지지 않았으면 문은 열리지 않고, 걷기는 문 앞 0.8 m에서 멈춰 기다린다("문 너머 공간을 불러오는 중…"). 새 모델의 벽은 걷기 지도에 합쳐진다.
+- 시험: drjohnson을 식당 문에서 두 모델로 자른 분할 테스트(`scripts/split-scene-test.mjs`, 겹침 1 m를 일부러 남김)와 `nav.split-test.json`:
+  `/?scene=drjohnson-split-parlour&app=1&space=drjohnson&navfile=nav.split-test.json`
+
+### 6-4. 기록
+- `door_open` {door, from, to, trigger: path | approach | near | hop}, `door_pass` {door, from, to}, `door_close` {door, at, trigger}, `doors`(시작 시 문 목록·소리·시간), `portal_load` {scene, ms}. 두 조건 모두 같은 이름으로 기록된다.
+
+### 6-5. 확인
+- `scripts/doors-check.mjs` → `docs/checks/doors/`: 두 조건 × 세로 390×844 · 가로 844×390, 닫힘 → 열리는 중 → 열림 → 지나감(뒤돌아봄) → 뒤에서 닫힘, 문 기록과 실제 열림 시간.

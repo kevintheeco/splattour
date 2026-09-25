@@ -1,7 +1,7 @@
 // Walking navigation check in real Chrome (GPU): eye height stays at standing
 // height, pace is a walk, double-click reaches floor spots and stops in front
 // of objects, routes never cross furniture, W A S D slides along walls.
-//   node scripts/walk-check.mjs <scene> [node]     (vite on :5190)
+//   node scripts/walk-check.mjs <scene> [node]     (vite on :5190, or VIEWER_URL)
 // Screenshots and walk-report.json go to ../docs/checks/walk-<scene>/.
 import { chromium } from "playwright-core";
 import path from "node:path";
@@ -16,7 +16,7 @@ const page = await browser.newPage({ viewport: { width: W, height: H } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => { if (m.text().startsWith("[walk]")) console.log(m.text()); });
-await page.goto(`http://localhost:5190/?scene=${scene}&onboarding=0${process.env.EXTRA || ""}`); // EXTRA: e.g. "&quality=lod"
+await page.goto(`${process.env.VIEWER_URL || "http://localhost:5190"}/?scene=${scene}&onboarding=0${process.env.EXTRA || ""}`); // EXTRA: e.g. "&quality=lod"
 await page.waitForFunction(() => window.splattour, null, { timeout: 180000 });
 const shot = (n) => page.screenshot({ path: path.join(out, n) });
 const rep = { scene, node: nodeId };

@@ -33,9 +33,11 @@ export async function loadListing(id) {
   return l;
 }
 
-export async function loadNav(id, listing) {
+// `file`: another nav file in the same space folder (test variants, e.g. &navfile=nav.split-test.json).
+export async function loadNav(id, listing, file = null) {
   const base = spaceBase(id);
-  const nav = await json(base + (listing?.explore?.nav || "nav.json"));
+  const alt = file && /^[\w.-]+\.json$/.test(file) ? file : null;
+  const nav = await json(base + (alt || listing?.explore?.nav || "nav.json"));
   return prepareNav(nav, base);
 }
 
