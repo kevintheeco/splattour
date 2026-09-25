@@ -22,7 +22,7 @@
       <div class="big">촬영 파일을 여기에 끌어다 놓으세요</div>
       <div class="small">폴더째 놓아도 됩니다 · 사진(jpg·heic) · 영상(mp4·mov)<br />수십 GB도 괜찮아요. 끊기면 같은 파일을 다시 고르면 이어서 올라갑니다</div>
       <div class="files" id="files"></div>
-      <input type="file" id="picker" multiple hidden accept="video/*,image/*,.insv,.heic,.heif" />
+      <input type="file" id="picker" multiple hidden accept="video/*,image/*,.insv,.insp,.360,.heic,.heif" />
     </div>
     <div class="form">
       <label class="f">공간 이름<input type="text" id="title" placeholder="예: 북촌 한옥 사랑채" /></label>
@@ -30,6 +30,7 @@
         <select id="quality">
           <option value="cloud">최고 품질 (원본 해상도, 약 20분)</option>
           <option value="cloud-draft">빠른 확인 (약 10분)</option>
+          <option value="hold">원본만 보관 (자동 처리 안 함 · 연구용 원본)</option>
         </select>
       </label>
       <label class="check"><input type="checkbox" id="pano" /> <span>360° 카메라로 찍었어요<small>인스타360 등으로 찍은 파노라마 영상·사진</small></span></label>

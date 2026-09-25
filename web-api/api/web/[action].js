@@ -86,6 +86,7 @@ async function ensureRunner() {
     env: {
       R2_ACCOUNT_ID: E.R2_ACCOUNT_ID, R2_ACCESS_KEY_ID: E.R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY: E.R2_SECRET_ACCESS_KEY,
       BUNDLE_URL: `${(E.R2_PUBLIC_URL || "").replace(/\/$/, "")}/${E.RUNNER_BUNDLE}`, MAX_HOURS: "5",
+      ...(E.RUNNER_VOCAB ? { VOCAB_URL: `${(E.R2_PUBLIC_URL || "").replace(/\/$/, "")}/${E.RUNNER_VOCAB}` } : {}),
       ...(E.RUNNER_PUBLIC_KEY ? { PUBLIC_KEY: E.RUNNER_PUBLIC_KEY } : {}),
     },
     dockerStartCmd: ["bash", "-c", RUNNER_CMD],
@@ -154,10 +155,18 @@ export default async function handler(req, res) {
     if (action === "finish") {
       if (!okId(b.id)) return res.status(400).json({ error: "잘못된 작업" });
       const manifest = {
-        id: b.id, title: String(b.title || "").slice(0, 120), quality: b.quality === "cloud-draft" ? "draft" : "standard",
+        id: b.id, title: String(b.title || "").slice(0, 120), quality: b.quality === "hold" ? "hold" : b.quality === "cloud-draft" ? "draft" : "standard",
         panorama: !!b.panorama, files: (b.files || []).filter((f) => inInbox(b.id, f.key)).map((f) => ({ name: String(f.name), size: +f.size, key: f.key })),
         finishedAt: new Date().toISOString(),
       };
+      if (manifest.quality === "hold") {
+        // Raw originals kept as-is (e.g. unstitched 360 video): no server is started;
+        // processing is launched by hand (pipeline/splattour/pano360.py, maxq.py).
+        manifest.runner = "hold";
+        await s3("PUT", `inbox/${b.id}/manifest.json`, "", JSON.stringify(manifest));
+        await setJob(b.id, { title: manifest.title, state: "held", label: "원본 보관됨 · 처리 대기", error: "" });
+        return res.status(200).json({ ok: true, runner: "hold" });
+      }
       const cloud = !!(E.RUNPOD_API_KEY && E.RUNNER_BUNDLE);
       if (cloud) manifest.runner = "cloud"; // processed by a cloud GPU server (pipeline/splattour/cloudjob.py)
       await s3("PUT", `inbox/${b.id}/manifest.json`, "", JSON.stringify(manifest));

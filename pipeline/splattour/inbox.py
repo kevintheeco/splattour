@@ -129,8 +129,8 @@ class Bridge:
                 man = json.loads(s3.get_object(Bucket=BUCKET, Key=f"inbox/{uid}/manifest.json")["Body"].read())
             except s3.exceptions.NoSuchKey:
                 continue  # still uploading
-            if man.get("runner") == "cloud":
-                continue  # a cloud GPU server processes this one (cloudjob.py)
+            if man.get("runner") in ("cloud", "hold"):
+                continue  # cloud GPU server (cloudjob.py), or raw originals kept for manual processing
             web[uid] = {"title": man["title"], "state": "downloading", "label": "받는 중", "at": time.time()}
             self.save()
             self.publish_jobs(s3)

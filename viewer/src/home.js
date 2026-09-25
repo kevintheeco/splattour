@@ -3,8 +3,8 @@
 // Processing runs on the studio machine, which picks new uploads up from
 // storage and publishes status to jobs/index.json there.
 const $ = (s) => document.querySelector(s);
-const MEDIA = /\.(mp4|mov|m4v|avi|mkv|insv|webm|jpe?g|png|heic|heif|webp|tiff?)$/i;
-const VIDEO = /\.(mp4|mov|m4v|avi|mkv|insv|webm)$/i;
+const MEDIA = /\.(mp4|mov|m4v|avi|mkv|insv|insp|360|webm|jpe?g|png|heic|heif|webp|tiff?)$/i;
+const VIDEO = /\.(mp4|mov|m4v|avi|mkv|insv|360|webm)$/i;
 const PARALLEL = 4;
 
 let cfg = { uploads: false, storage: "" };
@@ -110,7 +110,7 @@ $("#go").addEventListener("click", async () => {
     await upload(sess, sig, title, files);
     await api("finish", { id: sess.id, title, quality: $("#quality").value, panorama: $("#pano").checked, files: files.map((f, i) => ({ name: f.name, size: f.size, key: sess.files[i].key })) });
     store.del(sig);
-    $("#upState").textContent = "다 올라갔어요. 아래 '만드는 중'에서 진행을 볼 수 있어요";
+    $("#upState").textContent = $("#quality").value === "hold" ? "다 올라갔어요. 원본은 안전하게 보관됐고, 처리는 따로 시작해요" : "다 올라갔어요. 아래 '만드는 중'에서 진행을 볼 수 있어요";
     setFiles([]);
     $("#title").value = "";
     refresh();
