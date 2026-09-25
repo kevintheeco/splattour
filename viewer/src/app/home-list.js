@@ -1,7 +1,7 @@
 // 숙소 목록: one card per space in /spaces/index.json (photos swipe inside the card).
 import { listSpaces, loadNav, findScene, esc, TOUR, HOME } from "./data.js";
 import { icon } from "./icons.js";
-import { reveal, favs } from "./ui.js";
+import { reveal, favs, pager } from "./ui.js";
 
 // old "/?scene=" links on the published site go to the viewer
 if (new URLSearchParams(location.search).has("scene")) location.replace(TOUR + location.search);
@@ -39,6 +39,7 @@ async function main() {
       const i = Math.round(track.scrollLeft / track.clientWidth);
       dots.forEach((d, k) => d.classList.toggle("on", k === i));
     }, { passive: true });
+    pager(a.querySelector(".lcard-media"), track, icon("chevron"));
     const heart = a.querySelector(".lcard-heart");
     heart.classList.toggle("on", favs.has(l.id));
     heart.addEventListener("click", (e) => { e.preventDefault(); heart.classList.toggle("on", favs.toggle(l.id)); });

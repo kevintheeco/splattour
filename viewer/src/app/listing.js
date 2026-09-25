@@ -4,7 +4,7 @@
 // 360° 시점 탐색 · 3DGS 자유 시점 탐색. Everything comes from listing.json.
 import { loadListing, loadNav, findScene, esc, HOME } from "./data.js";
 import { icon } from "./icons.js";
-import { reveal, favs, toast } from "./ui.js";
+import { reveal, favs, toast, pager } from "./ui.js";
 
 const params = new URLSearchParams(location.search);
 const id = params.get("id") || "wolhajeong";
@@ -101,6 +101,7 @@ async function main() {
     $("#heroCount").textContent = `${Math.round(track.scrollLeft / track.clientWidth) + 1} / ${hero.length}`;
   }, { passive: true });
   track.addEventListener("click", (e) => { const i = e.target.dataset?.i; if (i != null) lightbox(hero.map((p) => ({ p })), +i); });
+  pager(track.parentElement, track, icon("chevron"));
   const bar = $("#bar");
   const onScroll = () => bar.classList.toggle("solid", scrollY > track.clientHeight - 70);
   addEventListener("scroll", onScroll, { passive: true });
@@ -195,7 +196,8 @@ function lightbox(items, start) {
   const track = $(".lb-track", lb), count = $(".lb-count", lb);
   const upd = () => { count.textContent = `${Math.round(track.scrollLeft / track.clientWidth) + 1} / ${items.length}`; };
   track.addEventListener("scroll", upd, { passive: true });
-  requestAnimationFrame(() => { track.scrollLeft = start * track.clientWidth; upd(); lb.classList.add("open"); });
+  const pgUpd = pager(lb, track, icon("chevron"));
+  requestAnimationFrame(() => { track.scrollLeft = start * track.clientWidth; upd(); pgUpd(); lb.classList.add("open"); });
   const close = () => { lb.classList.remove("open"); setTimeout(() => lb.remove(), 350); removeEventListener("keydown", key); };
   const key = (e) => { if (e.key === "Escape") close(); if (e.key === "ArrowRight") track.scrollBy({ left: track.clientWidth, behavior: "smooth" }); if (e.key === "ArrowLeft") track.scrollBy({ left: -track.clientWidth, behavior: "smooth" }); };
   addEventListener("keydown", key);

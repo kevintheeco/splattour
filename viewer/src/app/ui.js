@@ -28,3 +28,35 @@ export function toast(msg, ms = 1800) {
   clearTimeout(toast.t);
   toast.t = setTimeout(() => t.classList.remove("show"), ms);
 }
+
+// Prev/next arrows over a horizontal snap track (photo carousels): taps move
+// one photo, arrows hide at the ends. Swiping still works as before.
+export function pager(host, track, chevron) {
+  const mk = (dir) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `pg-btn pg-${dir}`;
+    b.setAttribute("aria-label", dir === "prev" ? "이전 사진" : "다음 사진");
+    b.innerHTML = chevron;
+    b.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const w = track.clientWidth;
+      const i = Math.round(track.scrollLeft / w) + (dir === "prev" ? -1 : 1);
+      track.scrollTo({ left: i * w, behavior: "smooth" });
+    });
+    host.appendChild(b);
+    return b;
+  };
+  const prev = mk("prev"), next = mk("next");
+  const upd = () => {
+    const i = Math.round(track.scrollLeft / track.clientWidth);
+    const n = track.children.length;
+    prev.hidden = i <= 0;
+    next.hidden = i >= n - 1 || n < 2;
+  };
+  track.addEventListener("scroll", upd, { passive: true });
+  addEventListener("resize", upd);
+  requestAnimationFrame(upd);
+  return upd;
+}
