@@ -1231,7 +1231,7 @@ def pick_pano_clip(st: dict, poses: dict, tf: dict, eye: float = 1.55) -> int | 
 
 # =========================================================================== cloud
 # RunPod secure cloud $/h (maxq.PRICE, 2026-09-25); 48 GB sm_89 cards first (the cached gsplat wheels are sm_89)
-PRICE = {"NVIDIA RTX 6000 Ada Generation": 0.84, "NVIDIA L40S": 1.09}
+PRICE = {"NVIDIA RTX 6000 Ada Generation": 0.84, "NVIDIA L40": 0.82, "NVIDIA L40S": 1.09, "NVIDIA GeForce RTX 4090": 0.74}
 GPUS = list(PRICE)  # sm_89: the cached gsplat wheels (tools/wheels/pt24cu124) run on these
 
 
