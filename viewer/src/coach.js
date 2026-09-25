@@ -16,7 +16,7 @@ const ICONS = {
 const STEPS = [
   { id: "look", icon: TOUCH ? "touch" : "look", text: TOUCH ? "손가락으로 밀어서<br />주변을 둘러보세요" : "드래그해서<br />주변을 둘러보세요" },
   { id: "move", icon: "move", text: TOUCH ? "바닥의 흰 원을 누르면<br />그곳으로 걸어가요" : "바닥의 흰 원을 누르면<br />그곳으로 걸어가요" },
-  { id: "close", icon: "close", text: TOUCH ? "궁금한 곳을 두 번 탭하면 가까이 다가가요<br />두 손가락으로 벌리면 확대" : "궁금한 곳을 더블클릭하면 가까이 다가가요<br />휠을 굴리면 확대" },
+  { id: "close", icon: "close", text: TOUCH ? "가고 싶은 곳을 두 번 탭하면 걸어가요<br />두 손가락으로 벌리면 확대" : "가고 싶은 곳을 더블클릭하면 걸어가요<br />W A S D로 걷기 · 휠로 확대" },
 ];
 
 export class Coach {

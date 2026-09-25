@@ -7,6 +7,7 @@ import { Hotspots } from "./hotspots.js";
 import { Minimap } from "./minimap.js";
 import { PanoMode } from "./panomode.js";
 import { Occupancy } from "./occupancy.js";
+import { WalkMap } from "./walk.js";
 import { Lighting } from "./lighting.js";
 import { TourAudio } from "./audio.js";
 import { Coach } from "./coach.js";
@@ -100,6 +101,26 @@ async function main() {
 
   const nav = new Navigator({ tour, rig, look });
   nav.headingFn = (p, yaw) => occ.openHeading(p, yaw);
+  // Walking (default): eye height, walking pace, around furniture.
+  // ?move=fly restores the earlier flight between viewpoints (study condition).
+  const walkMode = params.get("move") !== "fly";
+  const walkMap = walkMode ? new WalkMap(occ, tour) : null;
+  if (+params.get("walk") > 0) nav.walkSpeed = +params.get("walk");
+  const floorAt = (p) => tour.nearestNode(p).floorY;
+  // Waypoints from `from` to `to`: start and end keep their heights (viewpoints
+  // are the photographer's eye), the corners in between sit at eye height.
+  function planWalk(from, to) {
+    const g = walkMap.level(floorAt(to));
+    const r = walkMap.route(g, from, to);
+    if (!r) return null;
+    const eyeY = g.fy + tour.eyeHeight;
+    const pts = r.map(([x, z]) => new THREE.Vector3(x, eyeY, z));
+    pts[0] = from.clone();
+    const last = pts[pts.length - 1];
+    if (Math.hypot(last.x - to.x, last.z - to.z) < 0.02) last.y = to.y;
+    return pts;
+  }
+  if (walkMode) nav.planner = planWalk;
   // Study parameters: ?speed=<m/s> flight speed, ?vignette=0 turns the comfort vignette off.
   if (+params.get("speed") > 0) nav.speed = +params.get("speed");
   const vignetteOn = params.get("vignette") !== "0";
@@ -415,13 +436,55 @@ async function main() {
   });
   let clickTimer = 0;
 
-  // Double-click an object → fly up to it and look at it ("다가가 보기").
+  // Double-click anywhere → walk there. On the floor: to that spot. On a wall
+  // or an object: to standing distance in front of it, then look at it.
+  function walkToClick(e) {
+    raycaster.setFromCamera(ndc, camera);
+    const o = raycaster.ray.origin.clone(), dir = raycaster.ray.direction.clone();
+    const dist = occ.march(o, dir, 25, 0.15);
+    const fy = floorY();
+    floorPlane.constant = -fy;
+    const fh = raycaster.ray.intersectPlane(floorPlane, new THREE.Vector3());
+    const fd = fh ? fh.distanceTo(o) : Infinity;
+    let goal, lookAt = null;
+    const hitY = o.y + dir.y * dist;
+    // the floor itself is voxels too: a hit near floor height is a floor click
+    if (fd < 25 && (fd <= dist + 0.15 || hitY < fy + 0.3)) goal = fd <= dist + 0.15 ? fh : o.clone().addScaledVector(dir, dist);
+    else if (dist < 25) {
+      lookAt = o.clone().addScaledVector(dir, dist);
+      const h = new THREE.Vector3(dir.x, 0, dir.z);
+      const hl = h.length();
+      if (hl < 0.2) { look.zoomAt(look.targetFov * 0.6, e.clientX, e.clientY); return; } // straight up/down
+      goal = lookAt.clone().addScaledVector(h.divideScalar(hl), -0.75);
+    } else { toast("너무 멀어서 갈 수 없어요"); return; }
+    const eye = new THREE.Vector3(goal.x, fy + tour.eyeHeight, goal.z);
+    if (!lookAt) {
+      // A floor spot at the foot of a wall: stop a comfortable step short
+      // instead of ending nose to the wall.
+      const h = new THREE.Vector3(eye.x - o.x, 0, eye.z - o.z);
+      const hl = h.length();
+      if (hl > 0.01) {
+        h.divideScalar(hl);
+        const ahead = occ.march(eye, h, 0.6, 0.02);
+        if (ahead < 0.6) eye.addScaledVector(h, -Math.min(hl, 0.6 - ahead));
+      }
+    }
+    if (Math.hypot(eye.x - o.x, eye.z - o.z) < 0.35) {
+      if (lookAt) look.zoomAt(look.targetFov * 0.6, e.clientX, e.clientY); // already there: just zoom
+      return;
+    }
+    hideHint();
+    if (!nav.goToPoint(eye, { lookAt })) toast("거기까지 걸어갈 길이 없어요");
+  }
+
+  // Double-click an object → fly up to it and look at it ("다가가 보기", ?move=fly).
   // The surface is found with the occupancy grid (microseconds, no splat raycast).
   canvas.addEventListener("dblclick", (e) => {
     e.preventDefault();
     clearTimeout(clickTimer);
     if (mode !== "splat") return;
     ndc.set((e.clientX / canvas.clientWidth) * 2 - 1, -(e.clientY / canvas.clientHeight) * 2 + 1);
+    if (walkMode) { walkToClick(e); return; }
     raycaster.setFromCamera(ndc, camera);
     const o = raycaster.ray.origin.clone(), dir = raycaster.ray.direction.clone();
     const dist = occ.march(o, dir, 12, 0.15);
@@ -452,8 +515,11 @@ async function main() {
   }
 
   // Keyboard: W / ↑ moves to the neighbour best aligned with the view.
+  // (Walking mode walks freely with W A S D instead, see keyWalk; the
+  // panorama condition keeps the hop.)
   window.addEventListener("keydown", (e) => {
     if (e.key !== "ArrowUp" && e.key !== "w" && e.key !== "ArrowDown" && e.key !== "s") return;
+    if (walkMode && mode === "splat") return;
     if (!nav.current || nav.busy) return;
     const back = e.key === "ArrowDown" || e.key === "s";
     const fwd = new THREE.Vector3(-Math.sin(look.yaw), 0, -Math.cos(look.yaw));
@@ -585,9 +651,70 @@ async function main() {
     const eye = o.clone().addScaledVector(dir, step);
     const fy = floorY();
     eye.y = THREE.MathUtils.clamp(eye.y, fy + 0.5, fy + 2.3);
+    if (walkMode) {
+      // a walker leans in; the eyes stay at standing height
+      eye.y = o.y;
+      if (!walkMap.canStand(walkMap.level(fy), eye.x, eye.z)) { toast("더 가까이 갈 수 없어요"); return; }
+    }
     look.zoomAt(34); // widen as we move in: the object stays about the same size, now sharper
-    nav.goToPoint(eye, { lookAt: o.clone().addScaledVector(dir, dist), duration: 0.55 });
+    nav.goToPoint(eye, { fly: true, lookAt: o.clone().addScaledVector(dir, dist), duration: 0.55 });
   }, { passive: true });
+
+  // ---------- keyboard walking (W A S D / ↑ ↓, Shift to hurry) ----------
+  // Like a first-person game: move relative to where you look, slide along
+  // walls instead of stopping dead, eyes at standing height.
+  const held = new Set();
+  window.addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
+    held.add(e.code);
+  });
+  window.addEventListener("keyup", (e) => held.delete(e.code));
+  window.addEventListener("blur", () => held.clear());
+  const keyVel = new THREE.Vector3();
+  let keyWalking = false;
+  function keyWalk(dt) {
+    if (!walkMode || mode !== "splat") { keyVel.set(0, 0, 0); return; }
+    const fwd = (held.has("KeyW") || held.has("ArrowUp") ? 1 : 0) - (held.has("KeyS") || held.has("ArrowDown") ? 1 : 0);
+    const side = (held.has("KeyD") ? 1 : 0) - (held.has("KeyA") ? 1 : 0);
+    const want = new THREE.Vector3();
+    if (fwd || side) {
+      const sy = Math.sin(look.yaw), cy = Math.cos(look.yaw);
+      want.set(-sy * fwd + cy * side, 0, -cy * fwd - sy * side).normalize();
+      want.multiplyScalar(nav.walkSpeed * (held.has("ShiftLeft") || held.has("ShiftRight") ? 1.9 : 1));
+    }
+    // Limited acceleration (1.6 m/s², 2.4 to stop): a calm start, no lurch.
+    const dv = want.clone().sub(keyVel);
+    const lim = (want.lengthSq() >= keyVel.lengthSq() ? 1.6 : 2.4) * dt;
+    if (dv.length() > lim) dv.setLength(lim);
+    keyVel.add(dv);
+    if (keyVel.length() < 0.02 && !(fwd || side)) {
+      keyVel.set(0, 0, 0);
+      if (keyWalking) {
+        keyWalking = false;
+        // Stopped on a viewpoint: show its arrows again (without snapping onto it).
+        const n = tour.nearestNode(rig.position, { maxDist: 0.4 });
+        nav.current = n;
+        nav.dispatchEvent(new CustomEvent("arrive", { detail: { node: n } }));
+      }
+      return;
+    }
+    if (!keyWalking) {
+      keyWalking = true;
+      hideHint();
+      if (nav.moving) nav.stop();
+      nav.current = null;
+      nav.dispatchEvent(new CustomEvent("depart", { detail: { target: null, length: 0, duration: 0 } }));
+    }
+    const g = walkMap.level(floorY());
+    const p = rig.position;
+    const nx = p.x + keyVel.x * dt, nz = p.z + keyVel.z * dt;
+    // slide along obstacles: try the full step, then each axis alone
+    if (walkMap.canStand(g, nx, nz) || !walkMap.canStand(g, p.x, p.z)) { p.x = nx; p.z = nz; }
+    else if (walkMap.canStand(g, nx, p.z)) { p.x = nx; keyVel.z = 0; }
+    else if (walkMap.canStand(g, p.x, nz)) { p.z = nz; keyVel.x = 0; }
+    else keyVel.set(0, 0, 0);
+    p.y += (g.fy + tour.eyeHeight - p.y) * (1 - Math.exp(-dt * 6));
+  }
 
   // ---------- loop ----------
   const timer = new THREE.Timer();
@@ -597,8 +724,11 @@ async function main() {
     timer.update(now);
     const dt = Math.min(timer.getDelta(), 0.1);
     if (!renderer.xr.isPresenting) {
+      keyWalk(dt);
       nav.update(dt);
-      if (vignetteOn) vignette.style.opacity = nav.busy ? Math.min(1, nav.speedNow / 2.2).toFixed(3) : "0";
+      // walking pace needs only a hint of the comfort vignette
+      const vk = keyVel.length();
+      if (vignetteOn) vignette.style.opacity = nav.busy ? Math.min(1, nav.speedNow / (walkMode ? 4 : 2.2)).toFixed(3) : vk > 0.05 ? Math.min(1, vk / 4).toFixed(3) : "0";
       look.update(dt);
       updateHover(now);
     }

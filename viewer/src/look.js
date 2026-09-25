@@ -1,5 +1,5 @@
 // Street View style look controls: grab-drag to rotate with inertia,
-// wheel/pinch to zoom (FOV), arrow keys, and optional device orientation.
+// wheel/pinch to zoom (FOV), ← → keys to turn (W A S D walk, see main.js).
 import * as THREE from "three";
 
 const DEG = Math.PI / 180;
@@ -147,8 +147,8 @@ export class LookControls extends EventTarget {
     }
     if (this.enabled) {
       const s = 1.6 * dt;
-      if (this.keys.has("ArrowLeft") || this.keys.has("a")) this.yaw += s;
-      if (this.keys.has("ArrowRight") || this.keys.has("d")) this.yaw -= s;
+      if (this.keys.has("ArrowLeft")) this.yaw += s;
+      if (this.keys.has("ArrowRight")) this.yaw -= s;
       if (this.keys.has("PageUp")) this.pitch = Math.min(this.pitch + s, 85 * DEG);
       if (this.keys.has("PageDown")) this.pitch = Math.max(this.pitch - s, -85 * DEG);
       if (this.keys.has("+") || this.keys.has("=")) this.zoomAt(this.targetFov * Math.exp(-dt));

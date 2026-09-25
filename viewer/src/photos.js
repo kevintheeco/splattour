@@ -102,7 +102,7 @@ export class Photos {
     this.hideCompare();
     const e = new THREE.Euler().setFromQuaternion(ph.quat, "YXZ");
     this.look.roll = 0;
-    const flew = this.nav.goToPoint(ph.pos, { yaw: e.y, pitch: e.x, duration: THREE.MathUtils.clamp(0.9 + ph.pos.distanceTo(this.rig.position) * 0.35, 1, 3.2) });
+    const flew = this.nav.goToPoint(ph.pos, { fly: true, yaw: e.y, pitch: e.x, duration: THREE.MathUtils.clamp(0.9 + ph.pos.distanceTo(this.rig.position) * 0.35, 1, 3.2) });
     this.look.zoomAt(ph.fovY);
     const done = () => {
       this.look.set(e.y, e.x);
