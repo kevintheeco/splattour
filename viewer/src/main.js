@@ -122,6 +122,12 @@ async function main() {
   scene.add(spark);
 
   const tLoad = performance.now();
+  // Desktop, no ?quality=: the streamed tree gives the first view in seconds,
+  // then the full file loads behind it and replaces it (sharper far detail;
+  // the tree's pool can't hold every fine page). Phones stay on the tree (memory).
+  const progressive = lodMode && !tour.phone && !params.get("quality") && !!tour.fallbackUrl;
+  let viewerReady = null;
+  const ready = new Promise((r) => { viewerReady = r; });
   let splat = null;
   let occ = null;
   let streaming = null; // { splat } while a streamed view is still sharpening
@@ -808,6 +814,75 @@ async function main() {
   canvas.addEventListener("dblclick", () => coach.did("close"));
   canvas.addEventListener("wheel", () => coach.did("zoom"), { passive: true });
   app?.start({ nav, look, rig, canvas, tour, scene, renderer, camera, occ, walkMap, splat, sceneName, loadScene: loadExtraScene }).catch((e) => console.warn("[app]", e));
+  viewerReady();
+  if (progressive && streaming) upgradeToFull();
+
+  // ---------- progressive: streamed tree -> full file ----------
+  const nextFrames = (n) => new Promise((res) => { const f = () => (--n <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+  const tween = (sec, fn) => new Promise((res) => {
+    const t0 = performance.now();
+    const f = () => { const t = Math.min(1, (performance.now() - t0) / (sec * 1000)); fn(t); t < 1 ? requestAnimationFrame(f) : res(); };
+    requestAnimationFrame(f);
+  });
+  // Load `url` as a full mesh (progress -> onFrac), same transform as `t`.
+  async function loadFull(url, t, onFrac) {
+    const known = t.bytesOf(url);
+    const s = new SplatMesh({
+      url,
+      onProgress: (e) => { const total = e.lengthComputable ? e.total : known; if (total) onFrac?.(Math.min(1, e.loaded / total)); },
+    });
+    applyTransform(s, t.splatTransform);
+    await s.initialized;
+    s.updateMatrixWorld(true);
+    return s;
+  }
+  // Put `s` where `old` is drawn: same transform, lighting and room edits; it
+  // is generated and sorted while invisible, then faded in over the old one,
+  // and the old one fades out and is freed (with the page pool once no
+  // streamed mesh is left). No pose change, the walls grid is kept.
+  async function swapIn(old, s, { fade = true, onSwap } = {}) {
+    s.position.copy(old.position); s.quaternion.copy(old.quaternion); s.scale.copy(old.scale);
+    if (old.worldModifier) { s.worldModifier = old.worldModifier; s.updateGenerator(); }
+    if (old.edits) s.edits = old.edits;
+    s.opacity = 0;
+    scene.add(s);
+    await nextFrames(4);
+    const full = old.opacity;
+    if (fade) await tween(0.25, (t) => { s.opacity = full * t; });
+    else s.opacity = full;
+    onSwap?.(s);
+    if (fade) await tween(0.2, (t) => { old.opacity = full * (1 - t); });
+    scene.remove(old);
+    old.dispose();
+    let paged = false;
+    scene.traverse((o) => { if (o.paged) paged = true; });
+    if (!paged && spark.pager) { spark.pager.dispose(); spark.pager = undefined; }
+  }
+  async function upgradeToFull() {
+    streaming.full = { frac: 0 };
+    const t0 = performance.now();
+    try {
+      const s = await loadFull(tour.fallbackUrl, tour, (f) => { streaming.full.frac = f; });
+      streaming.full.frac = 1;
+      await ready;
+      const old = splat;
+      await swapIn(old, s, {
+        onSwap: (ns) => {
+          splat = ns;
+          lighting.splat = ns;
+          pano.splat = ns;
+          app?.portals?.replaceSplat(sceneName, ns);
+          if (window.splattour) window.splattour.splat = ns;
+        },
+      });
+      streaming.full.swapped = true;
+      window.__loadTimes = { ...window.__loadTimes, full: Math.round(performance.now() - tLoad) };
+      console.info(`[splattour] full file swapped in after ${Math.round(performance.now() - t0)} ms (${s.packedSplats?.numSplats} splats); streamed tree freed`);
+    } catch (e) {
+      console.warn("[splattour] full file failed, staying on the streamed tree:", e);
+      streaming.full = null;
+    }
+  }
 
   // Another room's model in the same space frame (app/portals.js): loaded
   // near a door to it, the same way as the first one (streamed tree + baked
@@ -832,6 +907,13 @@ async function main() {
       await s.initialized;
       s.updateMatrixWorld(true);
       o = new Occupancy(s, t2);
+    }
+    // the same progressive rule as the first scene: the room's full file replaces its tree when loaded
+    if (s.paged && !t2.phone && !params.get("quality") && t2.fallbackUrl) {
+      loadFull(t2.fallbackUrl, t2)
+        .then((full) => swapIn(s, full, { fade: false, onSwap: (ns) => app?.portals?.replaceSplat(name, ns) }))
+        .then(() => console.info(`[splattour] ${name}: full file swapped in`))
+        .catch((e) => console.warn(`[splattour] ${name}: full file failed, staying on the tree`, e));
     }
     return { name, tour: t2, splat: s, occ: o };
   }
@@ -974,6 +1056,19 @@ async function main() {
       pill.id = "streamPill";
       document.body.appendChild(pill);
     }
+    // progressive: one number over both phases (tree 25 %, full file 75 %), gone once the full file is in
+    if (streaming.full) {
+      if (streaming.full.swapped) {
+        if (!streaming.doneAt) { streaming.doneAt = performance.now(); setTimeout(() => tour.markLoaded(), 3000); }
+        pill.classList.remove("show");
+        return;
+      }
+      const st = streamState(streaming.splat);
+      streaming.shown = Math.min(0.99, Math.max(streaming.shown || 0, 0.25 * (st.root ? st.frac : 0) + 0.75 * streaming.full.frac));
+      pill.textContent = `선명하게 하는 중 ${Math.round(streaming.shown * 100)}%`;
+      pill.classList.add("show");
+      return;
+    }
     const st = streamState(streaming.splat);
     streaming.doneFrames = st.done ? (streaming.doneFrames || 0) + 1 : 0;
     if (streaming.doneFrames >= 20) {
@@ -1046,7 +1141,7 @@ async function main() {
   });
 
   // Debug / automation hooks (used by the evaluation scripts).
-  window.splattour = { walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat) };
+  window.splattour = { walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat), progress: () => (streaming ? { full: streaming.full && { ...streaming.full }, shown: streaming.shown || 0, pill: $("#streamPill")?.textContent || "", pillOn: !!$("#streamPill")?.classList.contains("show") } : null) };
 }
 
 main().catch((err) => {

@@ -32,9 +32,10 @@ export class Tour {
     let mode = "full";
     if (q === "lod" && lod) mode = "lod";
     // desktop with a tree: stream it too, so the first view appears in seconds
-    // instead of after the whole file (125 MB for 월하정); it refines to the
-    // full scene (desktop pool/splat budget below). The full file stays the
-    // fallback if streaming fails.
+    // instead of after the whole file (125 MB for 월하정); the full file then
+    // loads behind it and replaces it (main.js upgradeToFull: the tree alone
+    // leaves detail 3-5 m away soft). It is also the fallback if streaming fails.
+    // ?quality=lod | full | mobile force one mode (no upgrade).
     else if (!q && !phone && lod) mode = "lod";
     else if (q === "mobile" && data.splatMobile) mode = "mobile";
     else if (!q && phone) {

@@ -65,6 +65,17 @@ export class Portals {
     return m.promise;
   }
 
+  // A model's mesh was replaced (the streamed tree by the full file, see main.js):
+  // same opacity and room edits on the new one.
+  replaceSplat(name, mesh) {
+    const m = this.models.get(name);
+    if (!m || !m.splat) return;
+    mesh.opacity = m.splat.opacity;
+    m.splat = mesh;
+    if (name === this.o.primary.name) this.o.primary.splat = mesh;
+    this._applyEdits();
+  }
+
   // Keep at most two models: drop the least recently needed one (never the primary's walls, which stay merged).
   _evict(keep) {
     const loaded = [...this.models.values()].filter((m) => m.name !== keep);
