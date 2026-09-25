@@ -33,8 +33,8 @@ const rig = new THREE.Group(); // moved by the navigator; camera rotates inside 
 rig.add(camera);
 scene.add(rig);
 
-const spark = new SparkRenderer({ renderer });
-scene.add(spark);
+// Created once the tour says which splat file this device loads (see main()).
+let spark;
 
 const look = new LookControls(camera, canvas);
 
@@ -49,6 +49,20 @@ function toast(msg, ms = 1800) {
 function setProgress(frac, label) {
   $("#bar").style.width = `${Math.round(frac * 100)}%`;
   $("#loaderSub").textContent = label ?? `${Math.round(frac * 100)}%`;
+}
+
+const mb = (b) => (b / 1048576).toFixed(0);
+
+// Streaming state of a paged (LoD) splat: `root` once the coarse top of the
+// tree is resident (something is on screen), `frac` = share of the chunks the
+// current view asks for that are resident, `done` when none are missing.
+function streamState(splat) {
+  const pager = spark?.pager;
+  if (!pager || !splat?.paged) return { root: false, frac: 0, done: false, have: 0, want: 0 };
+  const want = pager.fetchPriority.filter((f) => f.splats === splat.paged);
+  const have = want.filter((f) => pager.getSplatsChunk(f.splats, f.chunk)).length;
+  const root = !!pager.getSplatsChunk(splat.paged, 0);
+  return { root, frac: want.length ? have / want.length : 0, done: root && have === want.length, have, want: want.length };
 }
 
 function applyTransform(obj, t) {
@@ -79,25 +93,134 @@ async function main() {
     $("#brand").prepend(back, help);
   }
 
-  const splat = new SplatMesh({
-    url: tour.splatUrl,
-    raycastable: true,
-    minRaycastOpacity: 0.2,
-    onProgress: (e) => {
-      if (e.lengthComputable) setProgress(e.loaded / e.total, `${(e.loaded / 1048576).toFixed(0)} / ${(e.total / 1048576).toFixed(0)} MB`);
-    },
-  });
-  applyTransform(splat, tour.splatTransform);
-  scene.add(splat);
-  const tLoad = performance.now();
-  await splat.initialized;
-  console.info(`[splattour] splat loaded ${splat.packedSplats?.numSplats} in ${Math.round(performance.now() - tLoad)}ms`);
-  splat.updateMatrixWorld(true);
-  setProgress(1, "공간 준비 중");
+  // Phones stream a level-of-detail tree (tour.splatMode "lod", full SH3
+  // colour): a pool of 64K-splat pages holds what the view needs, finest near
+  // the viewer, arriving in ~3 MB pieces instead of one 35 MB download + decode.
+  // The pool is sized to the tree once its header is in (capped at 40 pages =
+  // 2.6M splats), so a house-sized scene is never evicted and refetched while
+  // walking. Per-frame budget 2.0M splats: measured against the held-out
+  // photos this matches the desktop file (31.0 dB / 0.908 vs 30.4 / 0.909),
+  // where Spark's iOS default 1.5M gives 30.8 / 0.905. ?pages=, ?lodcount=,
+  // ?lodscale= tune it on a real phone.
+  const lodMode = tour.splatMode === "lod";
+  const maxPages = Math.max(4, Math.round(+params.get("pages") || 40));
+  spark = new SparkRenderer(
+    lodMode
+      ? {
+          renderer,
+          maxPagedSplats: maxPages * 65536,
+          lodSplatCount: +params.get("lodcount") || 2_000_000,
+          lodSplatScale: +params.get("lodscale") || 1,
+        }
+      : { renderer },
+  );
+  scene.add(spark);
 
-  const tOcc = performance.now();
-  const occ = new Occupancy(splat, tour);
-  console.info(`[splattour] occupancy ${occ.nx}x${occ.ny}x${occ.nz} in ${Math.round(performance.now() - tOcc)}ms`);
+  const tLoad = performance.now();
+  let splat = null;
+  let occ = null;
+  let streaming = null; // { splat } while a streamed view is still sharpening
+  if (lodMode) {
+    try {
+      ({ splat, occ } = await loadStreamed());
+      streaming = { splat };
+    } catch (e) {
+      console.warn("[splattour] streamed scene failed, loading the single file instead:", e);
+      if (splat) { scene.remove(splat); splat.dispose(); }
+      splat = null;
+      tour.splatMode = "fallback";
+      setProgress(0, "다른 방식으로 불러오는 중");
+    }
+  }
+  if (!splat) {
+    const occP = tour.phone && tour.lod?.occupancy ? loadBakedOccupancy() : null;
+    occP?.catch(() => {});
+    splat = await loadWhole(lodMode ? tour.fallbackUrl : tour.splatUrl);
+    const tOcc = performance.now();
+    // Phones take the grid baked from the same scene (seconds of CPU saved);
+    // desktop builds it as before.
+    occ = occP ? await occP.catch(() => null) : null;
+    if (!occ) occ = new Occupancy(splat, tour);
+    console.info(`[splattour] occupancy ${occ.nx}x${occ.ny}x${occ.nz} in ${Math.round(performance.now() - tOcc)}ms${occP ? " (baked)" : ""}`);
+  }
+  window.__loadTimes = { ...window.__loadTimes, mode: tour.splatMode, ready: Math.round(performance.now() - tLoad) };
+
+  // The single-file path: download, decode, then everything is resident.
+  async function loadWhole(url) {
+    const known = tour.bytesOf(url);
+    const s = new SplatMesh({
+      url,
+      raycastable: true,
+      minRaycastOpacity: 0.2,
+      onProgress: (e) => {
+        // Vercel compresses on the fly and sends no Content-Length; fall back to
+        // the size recorded in tour.json so the bar still moves.
+        const total = e.lengthComputable ? e.total : known;
+        if (total) setProgress(Math.min(1, e.loaded / total), `${mb(e.loaded)} / ${mb(total)} MB`);
+        else setProgress(0, `${mb(e.loaded)} MB`);
+      },
+    });
+    applyTransform(s, tour.splatTransform);
+    scene.add(s);
+    await s.initialized;
+    console.info(`[splattour] splat loaded ${s.packedSplats?.numSplats} in ${Math.round(performance.now() - tLoad)}ms`);
+    s.updateMatrixWorld(true);
+    setProgress(1, "공간 준비 중");
+    return s;
+  }
+
+  // The streamed path: header + baked occupancy grid, then render from the
+  // start viewpoint while chunks arrive. The loader lifts once the view is
+  // sharp, or 4 s after the first coarse picture, whichever comes first; the
+  // rest keeps sharpening behind a small progress pill.
+  async function loadBakedOccupancy() {
+    const r = await fetch(tour.lod.occupancy);
+    if (!r.ok) throw new Error(`occupancy ${r.status}`);
+    return Occupancy.fromBuffer(await r.arrayBuffer());
+  }
+
+  async function loadStreamed() {
+    if (!tour.lod?.occupancy) throw new Error("no baked occupancy grid");
+    const occP = loadBakedOccupancy();
+    occP.catch(() => {});
+    const s = new SplatMesh({ url: tour.splatUrl, paged: true });
+    splat = s; // so a failure below can remove it
+    applyTransform(s, tour.splatTransform);
+    scene.add(s);
+    const { meta } = await s.paged.getRadMeta(); // fails fast on 404 / CORS
+    // The pager is allocated on the first render, from this value.
+    if (!spark.pager && meta.chunks?.length) spark.maxPagedSplats = Math.min(maxPages, meta.chunks.length) * 65536;
+    const o = await occP;
+    console.info(`[splattour] streamed tree: ${meta.chunks?.length} chunks; occupancy ${o.nx}x${o.ny}x${o.nz} (baked)`);
+    const start = tour.byId.get(params.get("node")) || tour.start;
+    rig.position.copy(start.position);
+    look.set(start.yaw, start.pitch);
+    await new Promise((resolve, reject) => {
+      const t0 = performance.now();
+      let firstAt = 0;
+      let shown = 0;
+      let doneFrames = 0; // the wanted set grows as chunks arrive; "done" must hold
+      const tick = () => {
+        look.update(0);
+        renderer.render(scene, camera);
+        const st = streamState(s);
+        const now = performance.now();
+        if (st.root && !firstAt) {
+          firstAt = now;
+          window.__loadTimes = { ...window.__loadTimes, firstFrame: Math.round(now - tLoad) };
+          console.info(`[splattour] first streamed frame in ${Math.round(now - tLoad)}ms`);
+        }
+        shown = Math.max(shown, st.frac);
+        setProgress(shown, `${Math.round(shown * 100)}%`);
+        doneFrames = st.done ? doneFrames + 1 : 0;
+        if (st.root && (doneFrames >= 20 || now - firstAt > 4000)) return resolve();
+        if (!st.root && now - t0 > 45000) return reject(new Error("no data from the streamed scene in 45 s"));
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    return { splat: s, occ: o };
+  }
 
   const nav = new Navigator({ tour, rig, look });
   nav.headingFn = (p, yaw) => occ.openHeading(p, yaw);
@@ -135,6 +258,10 @@ async function main() {
     // ?photos=1 (the home page's "원본 사진 보기"): open straight on the photo list
     if (ok && params.get("photos") === "1") { photos.toggle(true); photosBtn.classList.add("on"); }
   }).catch((e) => console.warn("[photos]", e));
+  // Baked floor plan for the minimap on the streamed path (null elsewhere).
+  const planImage = splat.paged && tour.lod?.plan
+    ? new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = tour.lod.plan; })
+    : Promise.resolve(null);
   const pano = new PanoMode({ renderer, spark, scene, splat, hideObjects: [hotspots.group, hotspots.cursor] });
 
   // ---------- lighting & sound ----------
@@ -576,7 +703,7 @@ async function main() {
       if (!mm.hidden && !minimap) {
         toast("평면도를 만드는 중…");
         await new Promise((r) => setTimeout(r, 30));
-        minimap = new Minimap({ canvas: mm, tour, splat, rig, look });
+        minimap = new Minimap({ canvas: mm, tour, splat, rig, look, planImage: splat.paged ? await planImage : null });
         minimap.onPick = go;
       }
     }
@@ -624,6 +751,10 @@ async function main() {
   nav.jumpTo(startNode);
   if (mode === "pano") await setMode("pano");
   $("#loader").classList.add("done");
+  // Survived loading (see Tour.markLoaded): the streamed tree when it is sharp
+  // (above), or after a minute of use; a single file a few seconds after showing.
+  setTimeout(() => tour.markLoaded(), streaming ? 60000 : 5000);
+  if (tour.stepDown) toast("이 휴대폰에 맞춰 더 가벼운 방식으로 열었어요", 3500);
 
   // First-visit coaching (look → move → get close), see coach.js
   const coach = new Coach($("#hint"), params);
@@ -720,6 +851,31 @@ async function main() {
     p.y += (g.fy + tour.eyeHeight - p.y) * (1 - Math.exp(-dt * 6));
   }
 
+  // Small "sharpening" pill while the streamed view still misses chunks.
+  function updateStreamPill() {
+    let pill = $("#streamPill");
+    if (!pill) {
+      pill = document.createElement("div");
+      pill.id = "streamPill";
+      document.body.appendChild(pill);
+    }
+    const st = streamState(streaming.splat);
+    streaming.doneFrames = st.done ? (streaming.doneFrames || 0) + 1 : 0;
+    if (streaming.doneFrames >= 20) {
+      if (!streaming.doneAt) {
+        streaming.doneAt = performance.now();
+        window.__loadTimes = { ...window.__loadTimes, sharp: Math.round(streaming.doneAt - tLoad) };
+        setTimeout(() => tour.markLoaded(), 3000);
+      }
+      streaming.shown = 0;
+      pill.classList.remove("show");
+      return;
+    }
+    streaming.shown = Math.max(streaming.shown || 0, st.frac);
+    pill.textContent = `선명하게 하는 중 ${Math.round(streaming.shown * 100)}%`;
+    pill.classList.add("show");
+  }
+
   // ---------- loop ----------
   const timer = new THREE.Timer();
   let frames = 0;
@@ -742,6 +898,7 @@ async function main() {
     updateLamps();
     hotspots.update(dt, hoverMarker);
     if (minimap && !$("#minimap").hidden) minimap.draw(nav.current);
+    if (streaming) updateStreamPill();
 
     if (autoTour && !nav.busy && !pano.fade) {
       autoTour.wait += dt;
@@ -770,7 +927,7 @@ async function main() {
   });
 
   // Debug / automation hooks (used by the evaluation scripts).
-  window.splattour = { photos, tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE };
+  window.splattour = { photos, tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat) };
 }
 
 main().catch((err) => {

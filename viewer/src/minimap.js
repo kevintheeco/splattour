@@ -4,7 +4,7 @@
 import * as THREE from "three";
 
 export class Minimap {
-  constructor({ canvas, tour, splat, rig, look }) {
+  constructor({ canvas, tour, splat, rig, look, planImage = null }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.tour = tour;
@@ -12,7 +12,7 @@ export class Minimap {
     this.look = look;
     this.plan = null;
     this.hoverNode = null;
-    this._build(splat);
+    this._build(splat, planImage);
     canvas.addEventListener("pointermove", (e) => {
       this.hoverNode = this._nodeAt(e);
       canvas.style.cursor = this.hoverNode ? "pointer" : "default";
@@ -24,7 +24,9 @@ export class Minimap {
     });
   }
 
-  _build(splat) {
+  // planImage: the plan baked from the full scene (streamed phone path, where
+  // the splats are not all resident); same bounds, so it drops straight in.
+  _build(splat, planImage) {
     const nodes = this.tour.nodes;
     const floor = nodes.reduce((s, n) => s + n.floorY, 0) / nodes.length;
     const lo = floor + 0.25;
@@ -38,6 +40,14 @@ export class Minimap {
     const res = 0.04;
     const W = Math.min(1024, Math.ceil(size.x / res));
     const H = Math.min(1024, Math.ceil(size.y / res));
+    if (planImage) {
+      const off = document.createElement("canvas");
+      off.width = W;
+      off.height = H;
+      off.getContext("2d").drawImage(planImage, 0, 0, W, H);
+      this.plan = { canvas: off, box, size, count: 0 };
+      return;
+    }
     const grid = new Float32Array(W * H);
     const m = splat.matrixWorld;
     const p = new THREE.Vector3();

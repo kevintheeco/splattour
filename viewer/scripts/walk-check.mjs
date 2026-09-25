@@ -16,7 +16,7 @@ const page = await browser.newPage({ viewport: { width: W, height: H } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => { if (m.text().startsWith("[walk]")) console.log(m.text()); });
-await page.goto(`http://localhost:5190/?scene=${scene}&onboarding=0`);
+await page.goto(`http://localhost:5190/?scene=${scene}&onboarding=0${process.env.EXTRA || ""}`); // EXTRA: e.g. "&quality=lod"
 await page.waitForFunction(() => window.splattour, null, { timeout: 180000 });
 const shot = (n) => page.screenshot({ path: path.join(out, n) });
 const rep = { scene, node: nodeId };

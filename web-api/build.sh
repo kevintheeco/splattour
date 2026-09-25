@@ -17,6 +17,18 @@ cp scenes/index.json web-deploy/scenes/
 for s in "${SCENES[@]}"; do
   mkdir -p "web-deploy/scenes/$s"
   cp "scenes/$s/tour.json" "scenes/$s"/scene*.spz "web-deploy/scenes/$s/"
+  # Phone streaming files (scenes/<s>/lod, ~100 MB) live in R2, not in the
+  # bundle: point the deployed tour.json there. Upload them first with
+  #   (cd pipeline && .venv/Scripts/python.exe -m splattour.lod publish <s>)
+  if [ -f "scenes/$s/lod/scene-lod.rad" ] && [ -n "$STORAGE" ]; then
+    node -e '
+      const fs = require("fs"), [f, base] = process.argv.slice(1);
+      const t = JSON.parse(fs.readFileSync(f, "utf8"));
+      for (const k of ["splat", "occupancy", "plan", "thumbs"]) if (t.lod?.[k]) t.lod[k] = base + t.lod[k];
+      fs.writeFileSync(f, JSON.stringify(t, null, 2));
+    ' "web-deploy/scenes/$s/tour.json" "$STORAGE/scenes/$s/"
+    echo "phone LoD for $s -> $STORAGE/scenes/$s/lod/"
+  fi
   [ -d "scenes/$s/photos" ] && cp -r "scenes/$s/photos" "web-deploy/scenes/$s/"
 done
 du -sh --exclude=.vercel web-deploy

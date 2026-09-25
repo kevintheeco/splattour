@@ -72,6 +72,39 @@ export class Occupancy {
     this.solid = dil;
   }
 
+  // Baked copy (scripts/bake-lod-aux.mjs): the streamed phone path never holds
+  // every splat, so it loads the grid the full scene produced. Layout: "OCC1",
+  // u32 header length, JSON header {voxel, min, nx, ny, nz}, then one bit per
+  // voxel (x fastest, then z, then y), LSB first.
+  toBuffer() {
+    const head = new TextEncoder().encode(JSON.stringify({ voxel: this.voxel, min: this.box.min.toArray(), max: this.box.max.toArray(), nx: this.nx, ny: this.ny, nz: this.nz }));
+    const n = this.solid.length;
+    const out = new Uint8Array(8 + head.length + Math.ceil(n / 8));
+    out.set([79, 67, 67, 49]);
+    new DataView(out.buffer).setUint32(4, head.length, true);
+    out.set(head, 8);
+    const bits = out.subarray(8 + head.length);
+    for (let i = 0; i < n; i++) if (this.solid[i]) bits[i >> 3] |= 1 << (i & 7);
+    return out;
+  }
+
+  static fromBuffer(buf) {
+    const u8 = new Uint8Array(buf);
+    if (String.fromCharCode(...u8.subarray(0, 4)) !== "OCC1") throw new Error("occupancy: bad file");
+    const hl = new DataView(u8.buffer, u8.byteOffset).getUint32(4, true);
+    const h = JSON.parse(new TextDecoder().decode(u8.subarray(8, 8 + hl)));
+    const o = Object.create(Occupancy.prototype);
+    o.voxel = h.voxel;
+    o.box = new THREE.Box3(new THREE.Vector3().fromArray(h.min), new THREE.Vector3().fromArray(h.max));
+    o.nx = h.nx; o.ny = h.ny; o.nz = h.nz;
+    const n = h.nx * h.ny * h.nz;
+    const bits = u8.subarray(8 + hl);
+    if (bits.length < Math.ceil(n / 8)) throw new Error("occupancy: truncated file");
+    o.solid = new Uint8Array(n);
+    for (let i = 0; i < n; i++) o.solid[i] = (bits[i >> 3] >> (i & 7)) & 1;
+    return o;
+  }
+
   occupied(p) {
     const inv = 1 / this.voxel;
     const x = Math.floor((p.x - this.box.min.x) * inv);

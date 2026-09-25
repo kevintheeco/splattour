@@ -3,6 +3,17 @@
   "title": "Dr Johnson's House",
   "subtitle": "사진 263장으로 만든 3D 공간",
   "splat": "scene.spz",
+  "splatMobile": "scene.mobile.spz",
+  "bytes": {
+    "scene.spz": 44357906,
+    "scene.mobile.spz": 35543136
+  },
+  "lod": {
+    "splat": "lod/scene-lod.rad",
+    "occupancy": "lod/occupancy.bin",
+    "plan": "lod/plan.png",
+    "thumbs": "lod/thumbs/{id}.jpg"
+  },
   "splatTransform": {
     "position": [
       1.6228153971206813,
@@ -412,6 +423,5 @@
       "capturedOn": true
     }
   ],
-  "splatMobile": "scene.mobile.spz",
   "photos": "photos/photos.json"
 }

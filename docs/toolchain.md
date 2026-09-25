@@ -176,6 +176,22 @@ gsplat (latest release v1.5.3; `examples/simple_trainer.py` on main):
 
 ---
 
+## 6. Spark build-lod (phone streaming tree)
+- Binary: `toolsuild-loduild-lod.exe` (Spark repo `rust/build-lod`, built with rustup's
+  `x86_64-pc-windows-gnu` toolchain, `cargo build --release --no-default-features`: the default
+  `gpu` feature needs mingw `dlltool` and only speeds up `--cluster-sh`). RAD output is
+  format-compatible with the npm `@sparkjsdev/spark` 2.2.0 decoder (no RAD changes since v2.2.0).
+- Per scene: `python -m splattour.lod build <scene>` (bhatt "quality" tree from `scene.ply`, SH3,
+  `--rad-chunked`; Dr Johnson: 2.0M -> 2.44M splats, 38 chunks, 97 MB, ~3 min) then, with the dev
+  server on :5190, `node viewer/scripts/bake-lod-aux.mjs <scene>` (occupancy grid, minimap plan,
+  thumbnails from the full scene; the streamed phone path never holds every splat), then
+  `python -m splattour.lod publish <scene>` (R2). `tour.json` gets
+  `"lod": {"splat": "lod/scene-lod.rad", "occupancy": ..., "plan": ..., "thumbs": ...}` and
+  `"bytes"` (file sizes, for the progress bar when Vercel sends no Content-Length).
+- Measured on the 33 held-out Dr Johnson photos (`eval-render.mjs ... lod`, `data/eval/drj/lodcmp`):
+  desktop scene.spz 30.41 dB / 0.9085; old phone SH1 spz 28.34 / 0.8966; streamed SH3 tree at the
+  phone budget 2.0M 31.01 / 0.9076 (1.5M: 30.84 / 0.9045); streamed SH1 tree 28.14 / 0.8896.
+
 ## Timing (Brush on this laptop)
 - drjohnson, from scratch (no ply in folder), `--total-steps 3000 --max-resolution 1024 --max-splats 1500000 --eval-split-every 8`:
   **233 s**, 230 train / 33 eval views, 243k splats at step 2800, **eval PSNR 26.61, SSIM 0.872 at 3k steps**, 57 MB ply (`scratch_brushtest\drj_3000.ply`).
