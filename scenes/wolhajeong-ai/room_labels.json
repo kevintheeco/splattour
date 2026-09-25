@@ -1,0 +1,15 @@
+{
+ "note": "Take-01 video frame numbers (Take-01_<n>.png). The video stays in the courtyard and repeatedly walks into the dark entrance hall; it never enters 별채 사랑방 / 안채 거실·침실·욕실 / 부엌 (they are seen only through windows from the courtyard). Labels from the frames (brightness + contact sheets), 2026-09-25.",
+ "default": "앞마당",
+ "segments": [
+  {"room": "대문", "from": 6, "to": 22},
+  {"room": "대문", "from": 92, "to": 118},
+  {"room": "대문", "from": 190, "to": 216},
+  {"room": "대문", "from": 290, "to": 312},
+  {"room": "대문", "from": 386, "to": 410},
+  {"room": "대문", "from": 484, "to": 508},
+  {"room": "대문", "from": 584, "to": 612},
+  {"room": "대문", "from": 680, "to": 716},
+  {"room": "대문", "from": 776, "to": 806}
+ ]
+}

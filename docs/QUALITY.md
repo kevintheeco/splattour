@@ -117,3 +117,22 @@ R2 `cloud/max/20260925-f0b277376aab/sfm-A/sfm_keep.tgz`(노트북 `data/jobs/wol
 2. `feature_extractor`(같은 DB, 새 영상이 다른 카메라면 새 camera) → 새 프레임끼리 sequential+loop, 새↔옛 프레임은 vocab tree 매칭.
 3. `image_registrator`(또는 pycolmap incremental_mapping(input_path=sparse_distorted))로 기존 모델에 등록 → `bundle_adjuster`. 기존 카메라는 고정하면 world 좌표가 그대로 유지된다.
 4. 그 뒤 runner/bench 절차(make_dataset → 궤적 검사 → 학습)를 같은 설정으로. tour.json의 splatTransform은 그대로 써야 capture_path.json·360 핫스팟과 맞는다.
+
+## 9. 2026-09-26: 월하정 AI 후보정본 (`wolhajeong-ai`, 링크 전용)
+
+원인 가설: 입력 해상도가 낮다(1916×957, 가로 122° → 약 16 px/도, H.264 압축, 어두운 통로). 그래서 입력 프레임만 AI로 2배 복원하고, 나머지(SfM 포즈, 784장, 학습 설정)는 게시본과 똑같이 두었다.
+
+- **파일럿(노트북 CPU, 10개 크롭)**: Real-ESRGAN x2plus / SPAN 2x multijpg / SwinIR-M x2 GAN / realesr-general-x4v3(dn 0.5) / 4x-UltraSharp / 4xNomos8kSC. UltraSharp·Nomos는 콘크리트에 가짜 물결 무늬와 살창 겹선, SwinIR은 가장자리 긁힘, SPAN은 변화 거의 없음 → **x2plus 채택**. 다만 x2plus는 자갈 같은 면을 어둡게 만들어(평균 79.5→73.7) **저주파 톤 보정**(원본과 SR을 1배로 줄인 것의 차이를 σ 3px로 흐려 다시 더함)을 붙였다. 인접 프레임 두 쌍에서 결과가 일관됨. `docs/checks/wolhajeong-ai/pilot/`
+- **클라우드(RTX 6000 Ada 1대, $0.84/h, 1.94시간, 약 $1.63)**: `runner/aisr/launch.py` → `job.sh`가 혼자 끝까지 돌고 스스로 삭제. 784장 SR 7분, 학습 1시간 43분(3832×1914, 5M, 60k, antialiased, reg 0.00344, 게시본과 같은 명령), 평가·업로드. 결과 R2 `cloud/max/20260925-f0b277376aab/ai-x2/`(scene.ply, 모든 SR 프레임 sr_images.tar, 평가 이미지).
+- 카메라는 SfM을 다시 하지 않고 PINHOLE 내부값만 ×2(fx, fy, cx, cy, 폭, 높이). SR 프레임을 1배로 줄이면 원본과 평균 34.5 dB(최저 27.6).
+
+| 같은 98장 시험 사진, **원본 프레임** 대비 (1916×957 렌더) | PSNR | SSIM | LPIPS |
+|---|---|---|---|
+| 게시본 `wolhajeong` (같은 평가 코드로 재측정, 게시 기록 29.67/0.896/0.110과 일치) | **29.66** | **0.896** | **0.110** |
+| AI 후보정본 `wolhajeong-ai` | 28.96 | 0.887 | 0.133 |
+| (참고) AI본을 자기 입력인 SR 프레임 2배 해상도로 잰 학습 도구 값 | 27.14 | 0.852 | 0.190 |
+
+- 숫자는 원본 대비 모두 조금 나쁘다. 눈으로 보면 **선(살창, 서까래, 창틀, 기와 테두리)은 확실히 또렷**해지고(특히 2배 확대), **평평한 면의 잔 질감(회벽의 울퉁불퉁함, 자갈)은 매끈해진다**. SR 모델이 압축 노이즈와 함께 실제 미세 질감도 지운 것이 원본 대비 LPIPS가 나빠진 주된 이유로 보인다. 소나무 잎은 둘 다 흐리다(바람으로 움직여 다시점이 안 맞음).
+- 비교 이미지: `docs/checks/wolhajeong-ai/compare-n*.jpg`(투어 시점 11곳), `compare-off*.jpg`(촬영 경로 밖 5곳), 위=실제 크기, 아래=가운데 2배 확대, 왼쪽=게시본, 오른쪽=AI본. `heldout-*.jpg`는 학습에 안 쓴 원본 프레임과 나란히.
+- 웹: scene.spz 133 MB, 휴대폰 28 MB(150만, SH1), LoD 94조각 312 MB. `scenes/index.json`에는 넣지 않았다. 링크로만: `/tour.html?scene=wolhajeong-ai&from=cloud`. 사진은 게시본 것을 R2에서 복사.
+- 재현: `python runner/aisr/launch.py 6` → R2 `ai-x2/status.json`이 done이 될 때까지 대기 → scene.ply 받기 → `export_web` + 휴대폰 spz 150만 → `python -m splattour.lod build wolhajeong-ai` → `node viewer/scripts/bake-lod-aux.mjs wolhajeong-ai` → `python runner/aisr/publish.py wolhajeong-ai wolhajeong`.
