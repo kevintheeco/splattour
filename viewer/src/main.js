@@ -240,8 +240,8 @@ async function main() {
     const g = walkMap.level(floorAt(to));
     const r = walkMap.route(g, from, to);
     if (!r) return null;
-    const eyeY = g.fy + tour.eyeHeight;
-    const pts = r.map(([x, z]) => new THREE.Vector3(x, eyeY, z));
+    // eyes at each waypoint's floor + eye height (steps are smoothed by followFloor)
+    const pts = r.map(([x, z, h]) => new THREE.Vector3(x, (Number.isFinite(h) ? h : g.fy) + tour.eyeHeight, z));
     pts[0] = from.clone();
     const last = pts[pts.length - 1];
     if (Math.hypot(last.x - to.x, last.z - to.z) < 0.02) last.y = to.y;
@@ -584,8 +584,12 @@ async function main() {
     const fd = fh ? fh.distanceTo(o) : Infinity;
     let goal, lookAt = null;
     const hitY = o.y + dir.y * dist;
+    const hitP = o.clone().addScaledVector(dir, dist);
+    const hitFloor = dist < 25 ? walkMap.heightAt(walkMap.level(fy), hitP.x, hitP.z) : NaN;
+    // a walkable floor at another height (a 마루, a step) is a floor click too
+    if (Number.isFinite(hitFloor) && Math.abs(hitFloor - fy) > 0.1 && Math.abs(hitY - hitFloor) < 0.2) goal = hitP;
     // the floor itself is voxels too: a hit near floor height is a floor click
-    if (fd < 25 && (fd <= dist + 0.15 || hitY < fy + 0.3)) goal = fd <= dist + 0.15 ? fh : o.clone().addScaledVector(dir, dist);
+    else if (fd < 25 && (fd <= dist + 0.15 || hitY < fy + 0.3)) goal = fd <= dist + 0.15 ? fh : o.clone().addScaledVector(dir, dist);
     else if (dist < 25) {
       lookAt = o.clone().addScaledVector(dir, dist);
       const h = new THREE.Vector3(dir.x, 0, dir.z);
@@ -594,6 +598,9 @@ async function main() {
       goal = lookAt.clone().addScaledVector(h.divideScalar(hl), -0.75);
     } else { toast("너무 멀어서 갈 수 없어요"); return; }
     const eye = new THREE.Vector3(goal.x, fy + tour.eyeHeight, goal.z);
+    // a floor at another height (a 마루, a step): the eyes go to that floor
+    const gH = walkMap.heightAt(walkMap.level(fy), eye.x, eye.z);
+    if (Number.isFinite(gH)) eye.y = gH + tour.eyeHeight;
     if (!lookAt) {
       // A floor spot at the foot of a wall: stop a comfortable step short
       // instead of ending nose to the wall.
@@ -879,11 +886,51 @@ async function main() {
     // slide along obstacles: try the full step, then each axis alone
     // a door whose other side is still loading stops the step (app/portals.js)
     if (app?.stepBlocked?.(p.x, p.z, nx, nz)) { keyVel.set(0, 0, 0); return; }
-    if (walkMap.canStand(g, nx, nz) || !walkMap.canStand(g, p.x, p.z)) { p.x = nx; p.z = nz; }
-    else if (walkMap.canStand(g, nx, p.z)) { p.x = nx; keyVel.z = 0; }
-    else if (walkMap.canStand(g, p.x, nz)) { p.z = nz; keyVel.x = 0; }
+    // (a ledge higher than a step is a wall; a step is walked onto, see followFloor)
+    if (walkMap.canStep(g, p.x, p.z, nx, nz) || !walkMap.canStand(g, p.x, p.z)) { p.x = nx; p.z = nz; }
+    else if (walkMap.canStep(g, p.x, p.z, nx, p.z)) { p.x = nx; keyVel.z = 0; }
+    else if (walkMap.canStep(g, p.x, p.z, p.x, nz)) { p.z = nz; keyVel.x = 0; }
     else keyVel.set(0, 0, 0);
-    p.y += (g.fy + tour.eyeHeight - p.y) * (1 - Math.exp(-dt * 6));
+    const hk = walkMap.heightAt(g, p.x, p.z);
+    p.y += ((Number.isFinite(hk) ? hk : g.fy) + tour.eyeHeight - p.y) * (1 - Math.exp(-dt * 6));
+  }
+
+  // ---------- steps up and down (Minecraft-like) ----------
+  // Walking onto a floor at another height (a 마루, a 댓돌, a threshold):
+  // the eyes rise (or drop) to that floor + eye height over 0.25-0.35 s with
+  // an ease and a small bob, never a jump. On one flat floor nothing changes:
+  // the eyes are only moved once the floor under you has changed height.
+  const stepper = { goal: null, anim: null, active: false, lastX: 0, lastZ: 0, last: 0 };
+  const easeInOut = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
+  function followFloor(dt) {
+    if (!walkMode || mode !== "splat") { stepper.goal = null; stepper.active = false; return; }
+    const p = rig.position;
+    const h = walkMap.heightAt(walkMap.level(floorY()), p.x, p.z);
+    const moved = Math.hypot(p.x - stepper.lastX, p.z - stepper.lastZ);
+    stepper.lastX = p.x; stepper.lastZ = p.z;
+    if (!Number.isFinite(h)) { if (stepper.active) p.y = stepper.last; return; }
+    const target = h + tour.eyeHeight;
+    // a jump (capture point, task start): take the new place as it is
+    if (stepper.goal === null || moved > 0.5) { stepper.goal = target; stepper.anim = null; stepper.active = false; stepper.last = p.y; return; }
+    if (Math.abs(target - stepper.goal) > 0.04) {
+      const from = stepper.active ? stepper.last : p.y;
+      const d = target - from;
+      stepper.anim = { from, to: target, t: 0, dur: THREE.MathUtils.clamp(0.25 + (0.1 * Math.abs(d)) / 0.65, 0.25, 0.35), bob: Math.sign(d) * Math.min(1, Math.abs(d) / 0.3) * 0.02 };
+      stepper.goal = target;
+      stepper.active = true;
+      window.__steps?.push({ t: performance.now(), from: +from.toFixed(3), to: +target.toFixed(3) });
+    }
+    if (!stepper.active) return;
+    let y = stepper.goal;
+    const a = stepper.anim;
+    if (a) {
+      a.t = Math.min(1, a.t + dt / a.dur);
+      // rise with the leg, a hint of lift at the top (or of knees giving on the way down)
+      y = a.from + (a.to - a.from) * easeInOut(a.t) + a.bob * Math.sin(Math.PI * a.t);
+      if (a.t >= 1) stepper.anim = null;
+    }
+    p.y = y;
+    stepper.last = y;
   }
 
   // Small "sharpening" pill while the streamed view still misses chunks.
@@ -921,6 +968,7 @@ async function main() {
     if (!renderer.xr.isPresenting) {
       keyWalk(dt);
       nav.update(dt);
+      followFloor(dt);
       // walking pace needs only a hint of the comfort vignette
       const vk = keyVel.length();
       if (vignetteOn) vignette.style.opacity = nav.busy ? Math.min(1, nav.speedNow / (walkMode ? 4 : 2.2)).toFixed(3) : vk > 0.05 ? Math.min(1, vk / 4).toFixed(3) : "0";
@@ -964,7 +1012,7 @@ async function main() {
   });
 
   // Debug / automation hooks (used by the evaluation scripts).
-  window.splattour = { photos, tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat) };
+  window.splattour = { walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat) };
 }
 
 main().catch((err) => {
