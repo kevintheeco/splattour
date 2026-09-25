@@ -556,7 +556,7 @@ def _seg_main(spec_path: str) -> None:
     for i in range(0, len(files), B):
         batch = files[i:i + B]
         imgs = [_imread(f) for f in batch]
-        res = net.predict(imgs, classes=[0], conf=0.25, imgsz=1024, retina_masks=True, device=dev, verbose=False, half=dev == 0)
+        res = net.predict(imgs, classes=[0], conf=float(os.environ.get("PANO360_SEG_CONF", 0.08)), imgsz=1024, retina_masks=True, device=dev, verbose=False, half=dev == 0)
         for f, im, r in zip(batch, imgs, res):
             h, w = im.shape[:2]
             m = np.zeros((h, w), np.uint8)
@@ -623,7 +623,7 @@ def _seg_down(net, dev, eq_dir: Path, out: Path, dilate: float, W: int = 1920, s
             continue
         pano = cv2.resize(pano, (W, H), interpolation=cv2.INTER_AREA)
         imgs = [cv2.remap(pano, u, v, cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP) for u, v, _, _ in views]
-        res = net.predict(imgs, classes=[0], conf=0.25, imgsz=1024, retina_masks=True, device=dev, verbose=False)
+        res = net.predict(imgs, classes=[0], conf=float(os.environ.get("PANO360_SEG_CONF", 0.08)), imgsz=1024, retina_masks=True, device=dev, verbose=False)
         acc = np.zeros((H, W), np.uint8)
         for (u, v, bx, by), r in zip(views, res):
             if r.masks is None or not len(r.masks):
