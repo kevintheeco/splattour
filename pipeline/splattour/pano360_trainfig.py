@@ -149,6 +149,23 @@ def _eval(p, it):
         f.write(f"{it},{np.mean(ps):.3f},{np.mean(ss):.4f},{len(ps)},{time.time() - _state['t0']:.0f}\n")
 
 
+def _prune_check(p, thr: float = 0.02):
+    """Held-out PSNR/SSIM with and without the Gaussians of opacity < thr (the post-train prune): prune_eval.json."""
+    ev = {}
+    for tag, keep in (("full", None), ("pruned", torch.where(torch.sigmoid(p["opacities"]).flatten() >= thr)[0])):
+        q = p if keep is None else {k: v[keep] for k, v in p.items()}
+        f = os.path.join(OUT, "eval.csv")
+        before = open(f).read() if os.path.exists(f) else None
+        _eval(q, f"final_{tag}")
+        rows = open(f).read().splitlines()
+        last = rows[-1].split(",")
+        ev[tag] = {"psnr": float(last[1]), "ssim": float(last[2]), "gaussians": int((q["means"]).shape[0])}
+    ev["threshold"] = thr
+    ev["prune_ok"] = ev["pruned"]["psnr"] >= ev["full"]["psnr"] - 0.05
+    with open(os.path.join(OUT, "prune_eval.json"), "w") as fh:
+        json.dump(ev, fh, indent=1)
+
+
 def _snapshot(p, it, final=False):
     with torch.no_grad():
         n = p["means"].shape[0]
@@ -214,6 +231,7 @@ def install(DS: dict, argv: list[str]) -> None:
                         _eval(params, it)
                     if it == total:
                         _snapshot(params, it, final=True)
+                        _prune_check(params, float(os.environ.get("PANO360_PRUNE_OPACITY", 0.02)))
             except Exception:  # noqa: BLE001
                 _log_err(f"snapshot {step}")
             return r

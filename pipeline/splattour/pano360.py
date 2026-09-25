@@ -1454,6 +1454,34 @@ def launch(name: str, files: list[dict], opts: dict, hours: float, dry_run: bool
     return rec
 
 
+def prune_ply(ply: Path, thr: float) -> Path:
+    """Drop Gaussians with sigmoid(opacity) < thr from a 3DGS .ply (binary little-endian float32 vertex list)."""
+    with open(ply, "rb") as f:
+        head, props, n = [], [], 0
+        while True:
+            line = f.readline()
+            head.append(line)
+            t = line.decode().split()
+            if t and t[0] == "element" and t[1] == "vertex":
+                n = int(t[2])
+            elif t and t[0] == "property":
+                props.append(t[-1])
+            if line.strip() == b"end_header":
+                break
+        a = np.frombuffer(f.read(n * 4 * len(props)), np.float32).reshape(n, len(props))
+    op = 1 / (1 + np.exp(-a[:, props.index("opacity")]))
+    keep = a[op >= thr]
+    out = ply.with_name(ply.stem + f"_pruned{thr:g}.ply")
+    with open(out, "wb") as f:
+        for line in head:
+            if line.startswith(b"element vertex"):
+                line = ("element vertex %d" % len(keep)).encode() + bytes([10])
+            f.write(line)
+        f.write(np.ascontiguousarray(keep).tobytes())
+    log(f"pruned {n - len(keep)} of {n} Gaussians (opacity < {thr})")
+    return out
+
+
 def parallel_download(files: list[dict], media: Path, conc: int = 40, chunk: int = 32 << 20) -> dict:
     """R2 -> disk with `conc` ranged GETs in flight across all files, each range retried (8x, backoff) on its own."""
     import boto3
@@ -1628,6 +1656,17 @@ def remote() -> None:
                 res["figures_tb_error"] = str(e)[:300]
             up_dir(work / "figures", "figures")
         sdir = ROOT / "scenes" / name
+        pe = work / "figures" / "training" / "prune_eval.json"
+        if o.get("prune_opacity") and pe.exists():  # post-train prune, only when the held-out check says it costs nothing
+            try:
+                ev = json.loads(pe.read_text())
+                res["prune"] = ev
+                if ev.get("prune_ok"):
+                    info["ply_unpruned"] = info["ply"]
+                    info["ply"] = str(prune_ply(Path(info["ply"]), float(o["prune_opacity"])))
+                    res["prune"]["applied"] = True
+            except Exception as e:  # noqa: BLE001
+                res["prune_error"] = str(e)[:300]
         build_tour(ds / "sparse" / "0", Path(info["ply"]), sdir, title=o.get("title") or name, capture_height=o["camera_height"])
         web = export_web(sdir, mobile_max_splats=o.get("mobile_cap"))
         for f in ("tour.json", "scene.spz", "scene.mobile.spz", "build_report.json", "scene.ply"):
@@ -1752,6 +1791,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--exclude", action="append", default=[], help="cloud: leave this clip file out (repeatable)")
     ap.add_argument("--mask-refine", action="store_true", help="convex hull + temporal union (+-1 panorama) of the person masks for training")
     ap.add_argument("--nav-parallel", action="store_true", help="360 panoramas/fill in a thread next to the training")
+    ap.add_argument("--prune-opacity", type=float, help="cloud: after training drop Gaussians below this opacity if the held-out "
+                    "check (needs --figures) loses < 0.05 dB")
     ap.add_argument("--gpus", help="cloud: comma-separated RunPod GPU type ids (default: the sm_89 list)")
     ap.add_argument("--figures", type=Path, help='cloud: record the training for thesis figures, json {"views": [{"name", "clip", "t", '
                     '"view", "focal"}], "pipeline_frame": {"clip", "t"}} (pano360_trainfig.py)')
@@ -1835,6 +1876,8 @@ def main(argv: list[str] | None = None) -> None:
                 "exclude": a.exclude, "mask_refine": a.mask_refine, "nav_parallel": a.nav_parallel}
         if a.figures:
             opts["figures"] = json.loads(a.figures.read_text(encoding="utf-8"))
+        if a.prune_opacity:
+            opts["prune_opacity"] = a.prune_opacity
         if a.dense_prior:
             from .pano360_dense import build_prior
             base = ROOT / "data" / "pano360" / a.dense_prior / "cloud"
