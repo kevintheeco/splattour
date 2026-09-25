@@ -25,6 +25,36 @@ export async function prepare({ params, tour }) {
 class AppMode {
   constructor(o) { Object.assign(this, o); }
 
+  // 원본 / AI 보정 — the same space trained from the original frames or from
+  // AI-upscaled ones (listing.variants: [{scene, label}]). Demo only: hidden in
+  // study mode so both conditions keep one fixed picture. Switching reloads
+  // with the other scene at the current pose (?pose=).
+  variantSwitch(variants, chrome) {
+    const cur = this.params.get("scene");
+    const box = document.createElement("div");
+    box.className = "vc-variant";
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", "화질");
+    for (const v of variants) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = v.label;
+      b.setAttribute("aria-pressed", String(v.scene === cur));
+      if (v.scene === cur) b.classList.add("on");
+      b.addEventListener("click", () => {
+        if (v.scene === cur) return;
+        const u = new URL(location.href);
+        u.searchParams.set("scene", v.scene);
+        const p = this.rig.position;
+        u.searchParams.set("pose", [p.x, p.y, p.z, this.look.yaw, this.look.pitch].map((x) => x.toFixed(3)).join(","));
+        location.replace(u.href);
+      });
+      box.appendChild(b);
+    }
+    const actions = chrome.el.querySelector(".vc-actions");
+    actions ? actions.prepend(box) : chrome.el.appendChild(box);
+  }
+
   // Same exploration range as the 360° condition: walkable cells farther than
   // range.radius from every capture point are closed (?range=0 turns this off).
   limitWalk(walkMap) {
@@ -66,6 +96,7 @@ class AppMode {
       onBack: () => (STUDY ? confirm("실험을 그만두고 나갈까요?") : true),
     }));
     if (!nav) chrome.dev("이 공간의 촬영 지점(nav.json)이 없어 방 이름·평면도·탐색 범위를 맞출 수 없어요");
+    if (!STUDY && Array.isArray(listing?.variants) && listing.variants.length > 1) this.variantSwitch(listing.variants, chrome);
 
     // study log: the tour's study.js (pose, moves, zoom) + room and task events
     let study = null;

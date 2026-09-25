@@ -162,3 +162,8 @@ html.app-mode #minimap, html.app-mode #mood, html.app-mode #photos, html.app-mod
 html.app-mode #toast { top: auto; bottom: calc(76px + var(--sab)); }
 html.app-mode #streamPill { top: auto; bottom: calc(20px + var(--sab)); }
 html.app-mode .hint { top: 55%; }
+
+/* 원본 / AI 보정 switch (demo only, hidden in study mode) */
+.vc-variant { display: flex; align-items: center; gap: 2px; height: 44px; padding: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-sizing: border-box; }
+.vc-variant button { border: 0; background: transparent; color: #444; font: inherit; font-size: 12.5px; font-weight: 700; padding: 0 11px; height: 36px; white-space: nowrap; border-radius: 999px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.vc-variant button.on { background: #1f1f22; color: #fff; }

@@ -762,6 +762,13 @@ async function main() {
   // ---------- start ----------
   const startNode = tour.byId.get(params.get("node")) || tour.start;
   nav.jumpTo(startNode);
+  // ?pose=x,y,z,yaw,pitch: resume the exact viewpoint (the 원본 / AI 보정 switch
+  // reloads the same space with the other scene; both share one world frame)
+  const pose = (params.get("pose") || "").split(",").map(Number);
+  if (pose.length === 5 && pose.every(Number.isFinite)) {
+    rig.position.set(pose[0], pose[1], pose[2]);
+    look.set(pose[3], pose[4]);
+  }
   if (mode === "pano") await setMode("pano");
   $("#loader").classList.add("done");
   // Survived loading (see Tour.markLoaded): the streamed tree when it is sharp
