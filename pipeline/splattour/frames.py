@@ -95,3 +95,91 @@ def ingest(inputs: list[Path], images_dir: Path, fps: float = 4.0, max_side: int
             report["photos"] += 1
     report["total_images"] = len(list(images_dir.glob("*.jpg")))
     return report
+
+
+def sharpness_normalized(path: Path, max_side: int = 640) -> float:
+    """Laplacian variance divided by the intensity variance: blur, not darkness. The plain
+    score (sharpness) is mostly brightness on dim footage: on 월하정 it would drop 20 % of the
+    frames, all of them the dark passages that join the rooms."""
+    img = cv2.imdecode(np.fromfile(str(path), np.uint8), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        try:
+            im = Image.open(path)
+            im.draft("L", (max_side, max_side))
+            img = np.asarray(im.convert("L"))
+        except Exception:
+            return 0.0
+    h, w = img.shape
+    s = max_side / max(h, w)
+    if s < 1:
+        img = cv2.resize(img, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA)
+    img = img.astype(np.float64)
+    return float(cv2.Laplacian(img, cv2.CV_64F).var() / (img.var() + 1e-6))
+
+
+def _downscale_copy(src: Path, dst: Path, max_side: int, clahe: bool = False) -> tuple[int, int]:
+    im = Image.open(src)
+    im.load()
+    if max(im.size) > max_side:
+        im.thumbnail((max_side, max_side), Image.LANCZOS)
+    if clahe:  # SfM copy only: lifts dark rooms so SIFT finds features there; training keeps the real colours
+        a = cv2.cvtColor(np.asarray(im.convert("RGB")), cv2.COLOR_RGB2LAB)
+        a[:, :, 0] = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(a[:, :, 0])
+        im = Image.fromarray(cv2.cvtColor(a, cv2.COLOR_LAB2RGB))
+    im.save(dst, quality=95)
+    return im.size
+
+
+def ingest_hires(inputs: list[Path], images_hi: Path, images_sfm: Path, hi_side: int = 3200, sfm_side: int = 1600,
+                 fps: float = 4.0, ffmpeg: str = "ffmpeg", workers: int | None = None, blur: str = "normalized",
+                 blur_ratio: float = 0.3, sfm_clahe: bool = True) -> dict:
+    """Max-quality ingest: every kept photo/frame is written twice with the same file name,
+    `images_hi` (long side ≤ hi_side, for training) and `images_sfm` (≤ sfm_side, for SfM:
+    poses need no more than that, and matching is much faster). Blur is judged on the
+    brightness-normalised score (blur="plain" = ingest()'s rule); the SfM copies get local
+    contrast (CLAHE) so dark rooms still match; training copies are near-lossless (q100, no
+    chroma subsampling). The SfM model is later rescaled to them (sfm.hires_dataset)."""
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+
+    images_hi.mkdir(parents=True, exist_ok=True)
+    images_sfm.mkdir(parents=True, exist_ok=True)
+    workers = workers or min(16, os.cpu_count() or 4)
+    report = {"videos": 0, "photos": 0, "frames": 0, "dropped_blurry": 0, "hi_side": hi_side, "sfm_side": sfm_side, "blur": blur,
+              "sfm_clahe": sfm_clahe}
+    files: list[Path] = []
+    for p in inputs:
+        files += sorted(x for x in p.rglob("*") if x.is_file()) if p.is_dir() else [p]
+    photos = []
+    for f in files:
+        ext = f.suffix.lower()
+        if ext in VIDEO_EXT:
+            report["videos"] += 1
+            report["frames"] += len(extract_video(f, images_hi, fps=fps, max_side=hi_side, ffmpeg=ffmpeg))
+        elif ext in IMAGE_EXT:
+            photos.append(f)
+    with ThreadPoolExecutor(workers) as ex:
+        if photos:
+            scores = np.array(list(ex.map(sharpness_normalized if blur == "normalized" else sharpness, photos)))
+            med = float(np.median(scores))
+            keep = [f for f, s in zip(photos, scores) if s >= blur_ratio * med]
+            report["dropped_blurry"] = len(photos) - len(keep)
+            report["dropped_names"] = [f.name for f, s in zip(photos, scores) if s < blur_ratio * med][:200]
+
+            def one(f: Path) -> tuple[int, int]:
+                im = ImageOps.exif_transpose(Image.open(f)).convert("RGB")
+                orig = im.size
+                if max(im.size) > hi_side:
+                    im.thumbnail((hi_side, hi_side), Image.LANCZOS)
+                im.save(images_hi / f"{f.stem}.jpg", quality=100, subsampling=0)
+                return orig
+            origs = list(ex.map(one, keep))
+            report["photos"] = len(keep)
+            report["original_sizes"] = {f"{w}x{h}": sum(1 for o in origs if o == (w, h)) for w, h in sorted(set(origs))}
+        hi = sorted(images_hi.glob("*.jpg"))
+        sizes = list(ex.map(lambda p: _downscale_copy(p, images_sfm / p.name, sfm_side, sfm_clahe), hi))
+    hs = [Image.open(p).size for p in hi]
+    report["total_images"] = len(hi)
+    report["train_sizes"] = {f"{w}x{h}": hs.count((w, h)) for w, h in sorted(set(hs))}
+    report["sfm_sizes"] = {f"{w}x{h}": sizes.count((w, h)) for w, h in sorted(set(sizes))}
+    return report

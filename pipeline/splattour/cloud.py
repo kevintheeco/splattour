@@ -32,6 +32,10 @@ IMAGE = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04"
 # Preference order: 24 GB+ cards that train a 4M-splat room in well under an hour.
 GPU_TYPES = ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA RTX 6000 Ada Generation", "NVIDIA RTX A6000",
              "NVIDIA A100 80GB PCIe", "NVIDIA A100-SXM4-80GB", "NVIDIA GeForce RTX 5090"]
+# Max-quality runs (maxq.py): 80 GB+ Hopper/Ampere only. Blackwell cards are left out on
+# purpose: the pod image's PyTorch 2.4 / CUDA 12.4 has no kernels for them.
+GPU_TYPES_MAX = ["NVIDIA H100 80GB HBM3", "NVIDIA H100 PCIe", "NVIDIA H100 NVL", "NVIDIA H200",
+                 "NVIDIA A100-SXM4-80GB", "NVIDIA A100 80GB PCIe"]
 
 
 def api_key() -> str:
@@ -267,9 +271,11 @@ if ls /workspace/wheels/*.whl >/dev/null 2>&1; then
 else
   pip install -q --no-build-isolation -r requirements.txt
   # build a cache for next time (only the slow, compiled git packages)
+  if [ -z "${SPLATTOUR_NO_WHEEL_BUILD:-}" ]; then
   mkdir -p /workspace/wheels_out
   grep -E "^git\+" requirements.txt | xargs -r pip wheel -q --no-deps --no-build-isolation -w /workspace/wheels_out || true
   pip download -q "gsplat==$V" --no-deps -d /workspace/wheels_out || true
+  fi
 fi
 echo SETUP_DONE $V
 """
@@ -435,8 +441,32 @@ def train_gsplat_cloud(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         log.close()
 
 
+def local_trainer_args(help_text: str, dataset: Path, out: Path, steps: int, cap_max: int, test_every: int,
+                       steps_scaler: int = 1, extra: list[str] | None = None) -> list[str]:
+    """simple_trainer.py command line for train_gsplat_local. steps_scaler > 1 (max quality)
+    stretches gsplat's whole schedule instead of only max_steps: MCMC refinement, SH
+    degree ramp and eval/save steps all scale (Config.adjust_steps), so `steps` total
+    steps are run with refinement continuing until 5/6 of the run."""
+    f = lambda n: _flag(help_text, n)  # noqa: E731
+    base = steps // steps_scaler if steps_scaler > 1 else steps
+    args = ["python", "simple_trainer.py", "mcmc", f("data_dir"), str(dataset), f("data_factor"), "1", f("result_dir"), str(out / "result"),
+            f("no_normalize_world_space") if f("no_normalize_world_space") in help_text else f("normalize_world_space"),
+            *([] if f("no_normalize_world_space") in help_text else ["False"]),
+            f("antialiased"), f("strategy.cap_max"), str(cap_max), f("max_steps"), str(base), f("eval_steps"), str(base),
+            f("save_steps"), str(base), f("save_ply"), f("ply_steps"), str(base), f("test_every"), str(test_every or 10**9), f("disable_viewer")]
+    if steps_scaler > 1:
+        args += [f("steps_scaler"), str(steps_scaler)]
+    for a in mcmc_reg_flags(dataset, f):
+        args += a.split(" ", 1)
+    for flag in extra or []:  # e.g. ["use_bilateral_grid"] or ["strategy.noise_lr=1e5"]
+        name, _, value = flag.partition("=")
+        args += [f(name), value] if value else [f(name)]
+    return args
+
+
 def train_gsplat_local(dataset: Path, out: Path, steps: int = 30000, cap_max: int = 2_000_000, test_every: int = 8,
-                       progress: Callable[[dict], None] | None = None, workdir: Path = Path("/workspace")) -> dict:
+                       progress: Callable[[dict], None] | None = None, workdir: Path = Path("/workspace"),
+                       steps_scaler: int = 1, extra: list[str] | None = None) -> dict:
     """Train on *this* machine's GPU (used on the cloud GPU server itself, where
     cloudjob.py runs the whole pipeline). Same setup script and trainer flags as
     train_gsplat_cloud, so results match the SSH-driven path."""
@@ -451,14 +481,12 @@ def train_gsplat_local(dataset: Path, out: Path, steps: int = 30000, cap_max: in
         raise RuntimeError("gsplat 설치 실패: " + (setup.stderr or setup.stdout)[-600:])
     ex = workdir / "gsplat" / "examples"
     help_text = sp.run(["python", "simple_trainer.py", "mcmc", "--help"], cwd=ex, capture_output=True, text=True).stdout
-    f = lambda n: _flag(help_text, n)  # noqa: E731
-    args = ["python", "simple_trainer.py", "mcmc", f("data_dir"), str(dataset), f("data_factor"), "1", f("result_dir"), str(out / "result"),
-            f("no_normalize_world_space") if f("no_normalize_world_space") in help_text else f("normalize_world_space"),
-            *([] if f("no_normalize_world_space") in help_text else ["False"]),
-            f("antialiased"), f("strategy.cap_max"), str(cap_max), f("max_steps"), str(steps), f("eval_steps"), str(steps),
-            f("save_steps"), str(steps), f("save_ply"), f("ply_steps"), str(steps), f("test_every"), str(test_every or 10**9), f("disable_viewer")]
-    for a in mcmc_reg_flags(dataset, f):
-        args += a.split(" ", 1)
+    if steps_scaler > 1 and _flag(help_text, "steps_scaler") not in help_text:
+        raise RuntimeError("this gsplat has no --steps-scaler")
+    for flag in extra or []:
+        if _flag(help_text, flag.partition("=")[0]) not in help_text:
+            raise RuntimeError(f"this gsplat has no --{flag}")
+    args = local_trainer_args(help_text, dataset, out, steps, cap_max, test_every, steps_scaler, extra)
     note({"phase": "학습 중", "step": 0, "steps": steps})
     last, t1 = 0, time.time()
     with open(out / "train.log", "w", encoding="utf-8") as logf:
@@ -484,6 +512,9 @@ def train_gsplat_local(dataset: Path, out: Path, steps: int = 30000, cap_max: in
     if stats:
         s = json.loads(stats[-1].read_text())
         info.update(eval_psnr=s.get("psnr"), eval_ssim=s.get("ssim"), eval_lpips=s.get("lpips"), num_splats=s.get("num_GS"))
+    tstats = sorted((out / "result" / "stats").glob("train_step*.json"))
+    if tstats:  # peak GPU memory (GB) as gsplat measured it
+        info["gpu_mem_gb"] = json.loads(tstats[-1].read_text()).get("mem")
     return info
 
 

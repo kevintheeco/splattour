@@ -91,7 +91,24 @@ def encode(fields: dict[str, np.ndarray], fractional_bits: int = 12, max_sh: int
     return data, {"splats": n, "dropped_invalid": int(n0 - n), "sh_degree": deg, "bytes": len(data)}
 
 
-def ply_to_spz(src: str | Path, dst: str | Path, **kw) -> dict:
-    data, info = encode(read_ply(src), **kw)
+def keep_most_visible(fields: dict[str, np.ndarray], n: int) -> dict[str, np.ndarray]:
+    """The `n` splats that cover the most of the picture, for a lighter phone file: opacity
+    × footprint (geometric mean of the two largest axes). Faint and tiny splats go first."""
+    total = len(fields["x"])
+    if total <= n:
+        return fields
+    sc = np.sort(np.stack([fields[f"scale_{i}"] for i in range(3)], 1).astype(np.float64), axis=1)  # log scales
+    alpha = 1.0 / (1.0 + np.exp(-fields["opacity"].astype(np.float64)))
+    score = alpha * np.exp(0.5 * (sc[:, 1] + sc[:, 2]))
+    score[~np.isfinite(score)] = -1.0
+    idx = np.sort(np.argpartition(-score, n)[:n])
+    return {k: v[idx] for k, v in fields.items()}
+
+
+def ply_to_spz(src: str | Path, dst: str | Path, max_splats: int | None = None, **kw) -> dict:
+    fields = read_ply(src)
+    if max_splats:
+        fields = keep_most_visible(fields, max_splats)
+    data, info = encode(fields, **kw)
     Path(dst).write_bytes(data)
     return info

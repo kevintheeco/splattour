@@ -31,11 +31,12 @@ def _run(args: list[str], log: Path) -> None:
 
 
 def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int = 1600, use_gpu: bool = False, mapper: str = "global",
-            ordered: bool = False) -> dict:
+            ordered: bool = False, camera_model: str = "OPENCV") -> dict:
     """images: folder of jpgs. work: output workspace. Returns timing + paths.
     Result: work/dense/{images, sparse/0} undistorted, ready for training."""
     if not Path(COLMAP).exists() or os.environ.get("SPLATTOUR_SFM") == "pycolmap":
-        return run_sfm_pycolmap(images, work, matcher=matcher, max_image_size=max_image_size, ordered=ordered)
+        return run_sfm_pycolmap(images, work, matcher=matcher, max_image_size=max_image_size, ordered=ordered, camera_model=camera_model,
+                                mapper=mapper)
     work.mkdir(parents=True, exist_ok=True)
     log = work / "colmap.log"
     db = work / "database.db"
@@ -53,7 +54,7 @@ def run_sfm(images: Path, work: Path, matcher: str = "auto", max_image_size: int
     t = {}
     t0 = time.time()
     _run([COLMAP, "feature_extractor", "--database_path", db, "--image_path", images,
-          "--ImageReader.single_camera", "1", "--ImageReader.camera_model", "OPENCV",
+          "--ImageReader.single_camera", "1", "--ImageReader.camera_model", camera_model,
           "--FeatureExtraction.use_gpu", gpu, "--FeatureExtraction.max_image_size", max_image_size], log)
     t["features"] = time.time() - t0
     t0 = time.time()
@@ -95,7 +96,8 @@ def _pick_matcher(n: int, ordered: bool) -> str:
     return "exhaustive" if n <= 150 else ("sequential" if ordered else "vocab")
 
 
-def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_size: int = 1600, ordered: bool = False) -> dict:
+def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_size: int = 1600, ordered: bool = False,
+                     camera_model: str = "OPENCV", mapper: str = "global") -> dict:
     """Same steps and settings as run_sfm, through the pycolmap API (pycolmap-cuda12 on
     the cloud GPU: SIFT extraction and matching on the GPU). Used where the COLMAP
     executable is not installed (Linux GPU servers)."""
@@ -114,7 +116,8 @@ def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_
         work.mkdir(parents=True, exist_ok=True)
         def cmd(m):
             try:
-                return subprocess.run([iso, "-m", "splattour.sfm", str(images), str(work), m, str(max_image_size), "1" if ordered else "0"],
+                return subprocess.run([iso, "-m", "splattour.sfm", str(images), str(work), m, str(max_image_size), "1" if ordered else "0",
+                                       camera_model, mapper],
                                       capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]), timeout=3 * 3600)
             except subprocess.TimeoutExpired as e:  # a hang must fail loudly, not keep the GPU server busy
                 return subprocess.CompletedProcess(e.cmd, 1, "", f"SfM timed out after 3 h (matcher {m}) faiss?")
@@ -143,7 +146,7 @@ def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_
     t = {}
     t0 = time.time()
     reader = pycolmap.ImageReaderOptions()
-    reader.camera_model = "OPENCV"
+    reader.camera_model = camera_model
     ext = pycolmap.FeatureExtractionOptions()
     ext.max_image_size = max_image_size
     pycolmap.extract_features(db, images, camera_mode=pycolmap.CameraMode.SINGLE, reader_options=reader, extraction_options=ext, device=dev)
@@ -167,10 +170,12 @@ def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_
     t0 = time.time()
     sparse = work / "sparse"
     sparse.mkdir(exist_ok=True)
-    recs = pycolmap.global_mapping(db, images, sparse)
+    # incremental: slower, but does not need focal-length priors (frames without EXIF)
+    recs = pycolmap.incremental_mapping(db, images, sparse) if mapper == "incremental" else pycolmap.global_mapping(db, images, sparse)
     if not recs:
         raise RuntimeError("SfM produced no model")
     best = max(recs.values(), key=lambda r: r.num_reg_images())
+    model_sizes = sorted((r.num_reg_images() for r in recs.values()), reverse=True)
     model = sparse / "best"
     model.mkdir(exist_ok=True)
     best.write(model)
@@ -188,7 +193,10 @@ def run_sfm_pycolmap(images: Path, work: Path, matcher: str = "auto", max_image_
     dropped = clean_model(s / "0", log)
     with open(log, "a", encoding="utf-8") as f:
         f.write(f"pycolmap {pycolmap.__version__} cuda={pycolmap.has_cuda} matcher={matcher} registered={best.num_reg_images()}/{n}\n")
-    return {"images": n, "registered": best.num_reg_images(), "dropped_cameras": dropped, "matcher": matcher, "mapper": "global",
+    return {"images": n, "registered": best.num_reg_images(), "models": model_sizes, "camera_model": camera_model,
+            "reproj_px": round(best.compute_mean_reprojection_error(), 3),
+            "unregistered": sorted(set(p.name for p in images.glob("*.jpg")) - {im.name for im in best.images.values()})[:400],
+            "dropped_cameras": dropped, "matcher": matcher, "mapper": mapper,
             "backend": f"pycolmap-{'cuda' if pycolmap.has_cuda else 'cpu'}", "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense)}
 
 
@@ -237,6 +245,105 @@ def clean_model(model: Path, log: Path) -> list[str]:
     return dropped
 
 
+def hires_dataset(work: Path, images_hi: Path, out: Path | None = None) -> dict:
+    """Training dataset at the resolution of `images_hi` from the SfM model in `work`
+    (solved on smaller copies of the same photos, frames.ingest_hires).
+
+    The distorted model's cameras are rescaled to the large images (focal length and
+    principal point scale with the pixel grid; OPENCV distortion coefficients act on
+    normalised coordinates and do not change), 2D observations likewise, then the large
+    photos are undistorted with it. Result: <out>/{images, sparse/0} whose cameras.bin
+    matches the images pixel for pixel, as gsplat expects at data_factor 1. The same
+    mis-registered cameras as the small dataset are removed (clean_model)."""
+    out = out or work / "dense_hi"
+    iso = os.environ.get("SPLATTOUR_SFM_PYTHON")
+    if iso:  # pycolmap lives in the isolated SfM environment on the GPU server (see run_sfm_pycolmap)
+        import json as _json
+        r = subprocess.run([iso, "-m", "splattour.sfm", "--hires", str(work), str(images_hi), str(out)], capture_output=True, text=True,
+                           cwd=str(Path(__file__).resolve().parents[1]), timeout=3 * 3600)
+        (work / "hires_stdout.log").write_text(r.stdout + r.stderr, encoding="utf-8")
+        if r.returncode != 0:
+            raise RuntimeError("high-resolution dataset failed: " + (r.stderr or r.stdout)[-600:])
+        return _json.loads(r.stdout.strip().splitlines()[-1])
+    return _hires_dataset(work, images_hi, out)
+
+
+def _distorted_model(work: Path) -> Path:
+    best = work / "sparse" / "best"  # pycolmap path; the COLMAP executable writes sparse/<n>
+    return best if (best / "images.bin").exists() else _largest_model(work / "sparse")
+
+
+def _image_size(path: Path) -> tuple[int, int]:
+    """(width, height) from the JPEG header; the isolated SfM environment has no PIL."""
+    with open(path, "rb") as f:
+        data = f.read(1 << 20)
+    i = 2
+    while i + 9 < len(data):
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+            return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7 or marker == 0xFF:
+            i += 1 if marker == 0xFF else 2
+            continue
+        i += 2 + int.from_bytes(data[i + 2:i + 4], "big")
+    import pycolmap
+    bm = pycolmap.Bitmap.read(str(path), False)
+    return bm.width, bm.height
+
+
+def _hires_dataset(work: Path, images_hi: Path, out: Path) -> dict:
+    import shutil
+
+    import numpy as np
+    import pycolmap
+
+    t0 = time.time()
+    rec = pycolmap.Reconstruction(str(_distorted_model(work)))
+    scales = {}
+    for cam_id in list(rec.cameras):
+        cam = rec.cameras[cam_id]
+        names = [im.name for im in rec.images.values() if im.camera_id == cam_id]
+        if not names:
+            continue
+        sizes = {_image_size(images_hi / n) for n in names}
+        if len(sizes) != 1:
+            raise RuntimeError(f"camera {cam_id}: large photos differ in size {sorted(sizes)[:4]}")
+        (W, H), (w, h) = sizes.pop(), (cam.width, cam.height)
+        sx, sy = W / w, H / h
+        if abs(sx - sy) > 0.01 * sx:
+            raise RuntimeError(f"camera {cam_id}: aspect changed {w}x{h} -> {W}x{H}")
+        cam.rescale(W, H)  # pycolmap returns references: this edits the reconstruction
+        if (rec.cameras[cam_id].width, rec.cameras[cam_id].height) != (W, H):
+            raise RuntimeError("pycolmap camera rescale did not stick")
+        k = np.array([sx, sy])
+        for im in rec.images.values():
+            if im.camera_id == cam_id:
+                for p in im.points2D:
+                    p.xy = p.xy * k
+        scales[int(cam_id)] = {"from": [w, h], "to": [W, H], "sx": round(sx, 6), "sy": round(sy, 6)}
+    tmp = work / "sparse_hi_distorted"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir(parents=True)
+    rec.write(str(tmp))
+    if out.exists():
+        shutil.rmtree(out)
+    pycolmap.undistort_images(str(out), str(tmp), str(images_hi), output_type="COLMAP")
+    s = out / "sparse"
+    (s / "0").mkdir(exist_ok=True)
+    for f in ("cameras.bin", "images.bin", "points3D.bin", "rigs.bin", "frames.bin"):
+        if (s / f).exists():
+            os.replace(s / f, s / "0" / f)
+    dropped = clean_model(s / "0", work / "colmap.log")
+    und = pycolmap.Reconstruction(str(s / "0"))
+    cams = {int(k): [c.width, c.height, *[round(float(v), 3) for v in c.params]] for k, c in und.cameras.items()}
+    return {"dataset": str(out), "images": und.num_reg_images(), "scales": scales, "cameras": cams, "dropped_cameras": dropped,
+            "seconds": round(time.time() - t0, 1)}
+
+
 def _largest_model(sparse: Path) -> Path:
     cands = [p.parent for p in sparse.rglob("images.bin")]
     if not cands:
@@ -248,5 +355,9 @@ if __name__ == "__main__":  # isolated SfM run (see run_sfm_pycolmap)
     import json as _json
     a = sys.argv[1:]
     os.environ.pop("SPLATTOUR_SFM_PYTHON", None)
-    res = run_sfm_pycolmap(Path(a[0]), Path(a[1]), matcher=a[2], max_image_size=int(a[3]), ordered=a[4] == "1")
+    if a[0] == "--hires":  # see hires_dataset
+        print(_json.dumps(_hires_dataset(Path(a[1]), Path(a[2]), Path(a[3]))))
+        sys.exit(0)
+    res = run_sfm_pycolmap(Path(a[0]), Path(a[1]), matcher=a[2], max_image_size=int(a[3]), ordered=a[4] == "1",
+                           camera_model=a[5] if len(a) > 5 else "OPENCV", mapper=a[6] if len(a) > 6 else "global")
     print(_json.dumps(res))

@@ -131,10 +131,11 @@ def run_job(inputs: list[Path], name: str, title: str, *, panorama: bool = False
     return job.dir
 
 
-def export_web(scene_dir: Path, floaters: bool = False, fmt: str = "spz") -> dict:
+def export_web(scene_dir: Path, floaters: bool = False, fmt: str = "spz", mobile_max_splats: int | None = None) -> dict:
     """scene.ply → scene.spz (≈11× smaller, CPU-only, seconds) or .sog
     (≈15×, needs a working WebGPU device), removing NaNs (and optionally
-    floaters), and point tour.json at it. The .ply is kept for analysis."""
+    floaters), and point tour.json at it. The .ply is kept for analysis.
+    mobile_max_splats (max-quality scenes): the phone file keeps only that many splats."""
     src = scene_dir / "scene.ply"
     dst = scene_dir / f"scene.{fmt}"
     t0 = time.time()
@@ -145,7 +146,7 @@ def export_web(scene_dir: Path, floaters: bool = False, fmt: str = "spz") -> dic
         ply_to_spz(src, dst)
         # Phone variant: view-dependent colour cut to SH degree 1 (−30 % size,
         # −0.28 dB on playroom). The viewer picks it on touch devices.
-        ply_to_spz(src, scene_dir / "scene.mobile.spz", max_sh=1)
+        ply_to_spz(src, scene_dir / "scene.mobile.spz", max_sh=1, max_splats=mobile_max_splats)
     else:
         args = [str(SPLAT_TRANSFORM), "-w", str(src), "-N"]
         if floaters:
