@@ -51,14 +51,17 @@ def _steps(argv):
 def _render(p, c2w, K, W, H, scale_mul=None, opacity=None, sh0_only=False, keep=None, bg=0.0):
     from gsplat.rendering import rasterization
     means, quats, scales, op = p["means"], p["quats"], torch.exp(p["scales"]), torch.sigmoid(p["opacities"])
-    colors = p["sh0"] if sh0_only else torch.cat([p["sh0"], p["shN"]], 1)
+    if "sh0" in p:
+        colors = p["sh0"] if sh0_only else torch.cat([p["sh0"], p["shN"]], 1)
+    else:  # app_opt: base colour (the per-photo appearance module is left out, like the viewer's view-independent colour)
+        colors = torch.sigmoid(p["colors"])
     if keep is not None:
         means, quats, scales, op, colors = means[keep], quats[keep], scales[keep], op[keep], colors[keep]
     if scale_mul is not None:
         scales = scales * scale_mul
     if opacity is not None:
         op = opacity if torch.is_tensor(opacity) else torch.full_like(op, float(opacity))
-    deg = int(round(math.sqrt(colors.shape[1]))) - 1
+    deg = int(round(math.sqrt(colors.shape[1]))) - 1 if colors.dim() == 3 else None
     c2w = torch.as_tensor(c2w, dtype=torch.float32, device=means.device)
     K = torch.as_tensor(K, dtype=torch.float32, device=means.device)
     img, _, _ = rasterization(means, quats, scales, op, colors, torch.linalg.inv(c2w)[None], K[None], int(W), int(H), sh_degree=deg,
@@ -181,7 +184,7 @@ def _snapshot(p, it, final=False):
         if it in saves:
             np.savez_compressed(os.path.join(OUT, f"gaussians_{it:06d}.npz"), means=p["means"].detach().half().cpu().numpy(),
                                 scales=p["scales"].detach().half().cpu().numpy(), quats=p["quats"].detach().half().cpu().numpy(),
-                                opacities=p["opacities"].detach().half().cpu().numpy().reshape(-1), sh0=p["sh0"].detach().half().cpu().numpy())
+                                opacities=p["opacities"].detach().half().cpu().numpy().reshape(-1), sh0=(p["sh0"] if "sh0" in p else p["colors"]).detach().half().cpu().numpy())
         if _state["views"] is None:
             _state["views"] = _resolve_views()
         tag = "final" if final else f"{it:06d}"

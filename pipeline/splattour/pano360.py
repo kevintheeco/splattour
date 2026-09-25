@@ -697,6 +697,26 @@ import imageio.v2 as imageio
 MASKS = os.environ.get("PANO360_MASKS", "")
 DROP = set(json.load(open(os.environ["PANO360_DROP"]))) if os.environ.get("PANO360_DROP") and os.path.exists(os.environ["PANO360_DROP"]) else set()
 _init, _get = C.Dataset.__init__, C.Dataset.__getitem__
+EXCL = os.environ.get("PANO360_EXCLUDE_RE", "")
+if EXCL:  # leave views out of the whole run (e.g. a clip SfM misplaced); scene_scale from the kept cameras only
+    import re as _re
+    _pinit = C.Parser.__init__
+    def pinit(self, *a, **k):
+        _pinit(self, *a, **k)
+        keep = [i for i, n in enumerate(self.image_names) if not _re.search(EXCL, n)]
+        print(f"[pano360] parser: keeping {len(keep)} of {len(self.image_names)} views (excluded /{EXCL}/)", flush=True)
+        self.image_names = [self.image_names[i] for i in keep]
+        self.image_paths = [self.image_paths[i] for i in keep]
+        self.camera_ids = [self.camera_ids[i] for i in keep]
+        self.camtoworlds = self.camtoworlds[keep]
+        loc = self.camtoworlds[:, :3, 3]
+        ctr = loc.mean(0)
+        old = self.scene_scale
+        self.scene_scale = float(np.max(np.linalg.norm(loc - ctr, axis=1)))
+        m = np.linalg.norm(self.points - ctr, axis=1) < 4 * self.scene_scale
+        self.points, self.points_rgb, self.points_err = self.points[m], self.points_rgb[m], self.points_err[m]
+        print(f"[pano360] scene_scale {old:.2f} -> {self.scene_scale:.2f}, init points {int(m.sum())}", flush=True)
+    C.Parser.__init__ = pinit
 DS = {}
 def init(self, parser, split="train", *a, **k):
     _init(self, parser, split, *a, **k)
@@ -727,6 +747,28 @@ runpy.run_path("simple_trainer.py", run_name="__main__")
 '''
 
 
+def far_clips(dataset: Path, factor: float = 3.0) -> list[str]:
+    """Clips whose cameras sit far outside the rest of the model (a clip SfM placed wrongly, 2026-09-26: 0010 at
+    ~30 units while everything else was within 6.4). gsplat's scene_scale = the farthest camera, so one such clip
+    makes every learning rate ~5x too big and the training diverges (held-out PSNR 21 -> 6 dB by 11k)."""
+    import re as _re
+
+    from .colmap_io import read_model
+    m = read_model(dataset / "sparse" / "0")
+    by = {}
+    for im in m.images.values():
+        mm = _re.search(r"/c(\d\d)_", im.name)
+        if mm:
+            by.setdefault(mm.group(1), []).append(im.center)
+    if len(by) < 2:
+        return []
+    allc = np.concatenate([np.array(v) for v in by.values()])
+    ctr = np.median(allc, 0)
+    med = {k: float(np.median(np.linalg.norm(np.array(v) - ctr, axis=1))) for k, v in by.items()}
+    base = float(np.median(np.linalg.norm(allc - ctr, axis=1)))
+    return [k for k, v in med.items() if v > factor * max(base, 1e-6) and len(by[k]) < 0.5 * len(allc)]
+
+
 def train_masked(dataset: Path, out: Path, steps: int, cap_max: int, test_every: int, steps_scaler: int = 1, extra: list[str] | None = None,
                  progress=None, workdir: Path = Path("/workspace")) -> dict:
     """cloud.train_gsplat_local with the person masks: same setup script and trainer flags, but the
@@ -749,7 +791,12 @@ def train_masked(dataset: Path, out: Path, steps: int, cap_max: int, test_every:
     args = local_trainer_args(help_text, dataset, out, steps, cap_max, test_every, steps_scaler, extra)
     args[1] = "pano360_train.py"
     # expandable segments: the first 월하정 run died of fragmentation (OOM at step 22100 on a 24 GB card, 3.8 GB reserved-unused)
+    far = far_clips(dataset)
+    if far and not os.environ.get("PANO360_EXCLUDE_RE"):
+        log(f"clips placed far from the rest, left out of training: {far}")
+        (out / "excluded_clips.json").write_text(json.dumps(far))
     env = {**os.environ, "PANO360_MASKS": str(dataset / "masks"), "PANO360_DROP": str(dataset / "drop.json"),
+           **({"PANO360_EXCLUDE_RE": "/c(" + "|".join(far) + ")_"} if far and not os.environ.get("PANO360_EXCLUDE_RE") else {}),
            "PYTORCH_CUDA_ALLOC_CONF": os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")}
     t1 = time.time()
     last = 0
