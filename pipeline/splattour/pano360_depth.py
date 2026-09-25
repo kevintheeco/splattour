@@ -103,21 +103,36 @@ def ensure(work: Path, names: list[str]) -> dict:
 
 
 class Observed:
-    """SfM points each panorama observes (from the rig model, pycolmap)."""
+    """SfM points each panorama observes. Reads the COLMAP binary files directly (no pycolmap: on the GPU
+    server pycolmap lives in a separate environment and gsplat ships another package of that name)."""
 
     def __init__(self, model_dir: Path):
-        import pycolmap
-        rec = pycolmap.Reconstruction(str(model_dir))
-        self.by_pano: dict[str, np.ndarray] = {}
-        acc: dict[str, set] = {}
-        for im in rec.images.values():
+        import struct
+        from .colmap_io import _read_images_bin
+        ids, xyz = [], []
+        with open(model_dir / "points3D.bin", "rb") as f:
+            (n,) = struct.unpack("<Q", f.read(8))
+            for _ in range(n):
+                pid, x, y, z = struct.unpack("<Qddd", f.read(32))
+                f.read(3 + 8)
+                (t,) = struct.unpack("<Q", f.read(8))
+                f.seek(8 * t, 1)
+                ids.append(pid)
+                xyz.append((x, y, z))
+        ids = np.array(ids, np.int64)
+        xyz = np.array(xyz)
+        order = np.argsort(ids)
+        ids, xyz = ids[order], xyz[order]
+        acc: dict[str, list] = {}
+        for im in _read_images_bin(model_dir / "images.bin").values():
             pano = im.name.split("/", 1)[-1]
-            s = acc.setdefault(pano, set())
-            for p in im.points2D:
-                if p.has_point3D():
-                    s.add(p.point3D_id)
-        for pano, ids in acc.items():
-            self.by_pano[pano] = np.array([rec.points3D[i].xyz for i in ids]) if ids else np.zeros((0, 3))
+            acc.setdefault(pano, []).append(im.point3d_ids[im.point3d_ids >= 0])
+        self.by_pano: dict[str, np.ndarray] = {}
+        for pano, lst in acc.items():
+            u = np.unique(np.concatenate(lst)) if lst else np.zeros(0, np.int64)
+            k = np.searchsorted(ids, u)
+            ok = (k < len(ids)) & (ids[np.minimum(k, len(ids) - 1)] == u)
+            self.by_pano[pano] = xyz[k[ok]] if ok.any() else np.zeros((0, 3))
 
 
 def metric_depth(work: Path, name: str, C: np.ndarray, R: np.ndarray, pts: np.ndarray, W: int, H: int) -> tuple[np.ndarray, dict]:

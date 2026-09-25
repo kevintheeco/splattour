@@ -19,7 +19,7 @@ APT=$!
 SFM=$!
 python -m pip install -q boto3 opencv-python-headless scipy pillow requests || exit 1
 # person segmentation (the photographer walks next to the camera): its own env on top of the pod's torch
-( python -m venv --system-site-packages /workspace/segenv && /workspace/segenv/bin/pip install -q ultralytics ) &
+( python -m venv --system-site-packages /workspace/segenv && /workspace/segenv/bin/pip install -q ultralytics "transformers>=4.45" ) &
 SEG=$!
 wait $SFM || { echo "[boot] pycolmap install failed"; exit 1; }
 wait $APT

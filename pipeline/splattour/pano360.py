@@ -922,6 +922,39 @@ def _sfm_main(spec_path: str) -> None:
            "seconds": {k: round(v, 1) for k, v in t.items()}, "dataset": str(dense),
            "registered_panos_per_clip": per_clip, "models_by_clip": model_clips}
     (work / "pano_poses.json").write_text(json.dumps(frames))
+    # secondary models (places that did not connect to the main one): own dataset + poses, own world frame
+    secondary = []
+    for k, r in enumerate(sorted(recs.values(), key=lambda r: -r.num_reg_images())[1:], start=1):
+        pf = {}
+        for im in r.images.values():
+            nm = im.name.split("/", 1)[1]
+            if im.has_pose and nm not in pf:
+                rfw = im.frame.rig_from_world
+                Rrw = np.array(rfw.rotation.matrix())
+                trw = np.array(rfw.translation).reshape(3)
+                pf[nm] = {"center": (-Rrw.T @ trw).tolist(), "R_pano_from_world": (pano_from_ref @ Rrw).tolist()}
+        info = {"model": k, "registered_panos": len(pf), "clips": model_clips[k] if k < len(model_clips) else {}}
+        if len(pf) >= int(os.environ.get("PANO360_MIN_SECONDARY", 12)):
+            mw = work / f"m{k}"
+            (mw / "sparse" / "best").mkdir(parents=True, exist_ok=True)
+            r.write(str(mw / "sparse" / "best"))
+            try:
+                if views_hi != views:
+                    from .sfm import _hires_dataset
+                    _hires_dataset(mw, views_hi, mw / "dense")
+                else:
+                    pycolmap.undistort_images(str(mw / "dense"), str(mw / "sparse" / "best"), str(views), output_type="COLMAP")
+                    s2 = mw / "dense" / "sparse"
+                    (s2 / "0").mkdir(exist_ok=True)
+                    for f in ("cameras.bin", "images.bin", "points3D.bin", "rigs.bin", "frames.bin"):
+                        if (s2 / f).exists():
+                            os.replace(s2 / f, s2 / "0" / f)
+                (mw / "pano_poses.json").write_text(json.dumps(pf))
+                info.update(dataset=str(mw / "dense"), poses=str(mw / "pano_poses.json"))
+            except Exception as e:  # noqa: BLE001
+                info["error"] = str(e)[:300]
+        secondary.append(info)
+    res["secondary_models"] = secondary
     (work / "sfm_result.json").write_text(json.dumps(res))
     print(json.dumps(res))
 
@@ -1152,10 +1185,16 @@ def process(inputs: list[Path], work: Path, *, n_frames: int = 300, fps: float =
 
 
 def nav_stage(work: Path, scene_dir: Path | None, *, spacing: float, camera_height: float, labels: dict | None, pano_clip: int | None,
-              nav_pano_width: int | None, workers: int = 4) -> dict:
+              nav_pano_width: int | None, workers: int = 4, model: int = 0) -> dict:
+    """model 0 = the main SfM model; k >= 1 = a place that did not connect (own frame, out dir nav_m<k>)."""
     st = json.loads((work / "pano360.json").read_text(encoding="utf-8"))
-    tf = viewer_transform(Path(st["sfm"]["dataset"]), scene_dir, camera_height)
-    poses = json.loads((work / "sfm" / "pano_poses.json").read_text())
+    if model:
+        sec = next(x for x in st["sfm"]["secondary_models"] if x["model"] == model)
+        dataset, poses_p, nav_dir = Path(sec["dataset"]), Path(sec["poses"]), work / f"nav_m{model}"
+    else:
+        dataset, poses_p, nav_dir = Path(st["sfm"]["dataset"]), work / "sfm" / "pano_poses.json", work / "nav"
+    tf = viewer_transform(dataset, scene_dir, camera_height)
+    poses = json.loads(poses_p.read_text())
     if pano_clip is None and st["frames"]["clips"] and st.get("probe", {}).get("clips", {}).get("case") == "rig":
         # cameras recorded together: the 360 condition uses ONE of them. Separate passes each cover
         # their own rooms, so all of them give capture points.
@@ -1163,16 +1202,15 @@ def nav_stage(work: Path, scene_dir: Path | None, *, spacing: float, camera_heig
     pf = None
     if (work / "person" / "person_frac.json").exists():
         from .pano360_fill import Scene, person_frac_equirect
-        pf = person_frac_equirect(Scene(work))
-        (work / "person" / "pano_person_frac.json").write_text(json.dumps(pf))
-    res = build_nav(work / "equirect", st["frames"]["frames"], poses, tf, work / "nav", spacing=spacing, labels=labels,
+        pf = person_frac_equirect(Scene(work, model=model))
+    res = build_nav(work / "equirect", st["frames"]["frames"], poses, tf, nav_dir, spacing=spacing, labels=labels,
                     pano_clip=pano_clip, pano_width=nav_pano_width, workers=workers, person_frac=pf)
-    res.update(pano_clip=pano_clip, transform=tf["source"], scale=tf["s"])
-    hs = [n["position"][1] for n in json.loads((work / "nav" / "nav.json").read_text(encoding="utf-8"))["nodes"]]
+    res.update(pano_clip=pano_clip, transform=tf["source"], scale=tf["s"], model=model)
+    hs = [n["position"][1] for n in json.loads((nav_dir / "nav.json").read_text(encoding="utf-8"))["nodes"]]
     if tf["s"] == 1.0 or not hs or not (0.5 * camera_height < float(np.median(hs)) < 1.5 * camera_height):
         res["warning"] = ("floor/scale not found (align fell back): positions are in SfM units, not metres. The 3DGS tour uses the "
                           "same align(), check tour.json alignment before the study (indoor footage with a visible floor fixes it)")
-    st["nav"] = res
+    st["nav" if not model else f"nav_m{model}"] = res
     (work / "pano360.json").write_text(json.dumps(st, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     return res
 
@@ -1192,7 +1230,8 @@ def pick_pano_clip(st: dict, poses: dict, tf: dict, eye: float = 1.55) -> int | 
 
 
 # =========================================================================== cloud
-PRICE = {"NVIDIA L40S": 0.86, "NVIDIA RTX 6000 Ada Generation": 0.77, "NVIDIA GeForce RTX 4090": 0.69}
+# RunPod secure cloud $/h (maxq.PRICE, 2026-09-25); 48 GB sm_89 cards first (the cached gsplat wheels are sm_89)
+PRICE = {"NVIDIA RTX 6000 Ada Generation": 0.84, "NVIDIA L40S": 1.09}
 GPUS = list(PRICE)  # sm_89: the cached gsplat wheels (tools/wheels/pt24cu124) run on these
 
 
@@ -1360,49 +1399,99 @@ def remote() -> None:
         workers = min(16, os.cpu_count() or 4)
         st = process([media], work, n_frames=o["n_frames"], fps=o["fps"], fov=o["fov"], pano_width=o.get("pano_width"),
                      matcher=o["matcher"], mapper=o["mapper"], sfm_side=o["sfm_side"], workers=workers, person=o.get("person", True))
-        put(label="training", probe=st["probe"], frames={"n": st["frames_n"], "clips": st["frames"]["clips"]}, sfm=st["sfm"],
-            views={k: st["views"][k] for k in ("pano_size", "camera", "views", "images")}, person=st.get("person"))
         from .build_tour import build_tour
         from .run import export_web
-        ds = Path(st["sfm"]["dataset"])
-
-        def progress(d):
-            if d.get("step") and d["step"] % max(1, o["steps"] // 10) < o["steps"] // 100 + 1:
-                put(label="training", progress=d)
-        info = train_masked(ds, work / "train", steps=o["steps"], cap_max=o["cap"], test_every=o["test_every"], progress=progress,
-                            steps_scaler=o.get("steps_scaler", 1), extra=o.get("train_flags") or [])
-        put(label="export", train={k: v for k, v in info.items() if k != "ply"})
-        sdir = ROOT / "scenes" / name
-        build_tour(ds / "sparse" / "0", Path(info["ply"]), sdir, title=o.get("title") or name, capture_height=o["camera_height"])
-        web = export_web(sdir, mobile_max_splats=o.get("mobile_cap"))
-        nav = nav_stage(work, sdir, spacing=o["spacing"], camera_height=o["camera_height"], labels=o.get("labels"),
-                        pano_clip=o.get("pano_clip"), nav_pano_width=o.get("nav_pano_width"), workers=workers)
-        try:  # 360 panoramas without the photographer: real pixels from other frames, residual holes -> AI jobs
-            from .pano360_fill import main as fill_main
-            fill_main([str(work)])
-            nav["filled"] = True
-        except Exception as e:  # noqa: BLE001 — the unfilled panoramas are still there
-            nav["fill_error"] = str(e)[:300]
-        put(label="archiving", web=web, nav=nav)
 
         def up(p: Path, k: str):
             if p.exists():
                 s3.upload_file(str(p), BUCKET, arch + k)
-        for f in ("tour.json", "scene.spz", "scene.mobile.spz", "build_report.json", "scene.ply"):
-            up(sdir / f, f"scene/{f}")
-        up(work / "nav" / "nav.json", "nav/nav.json")
-        with ThreadPoolExecutor(16) as ex:
-            list(ex.map(lambda p: up(p, f"nav/pano/{p.name}"), sorted((work / "nav" / "pano").glob("*.jpg"))))
-            fl = work / "nav_filled"
-            if fl.exists():
-                list(ex.map(lambda p: up(p, f"nav_filled/{p.relative_to(fl).as_posix()}"), sorted(x for x in fl.rglob("*") if x.is_file())))
+
+        def up_dir(d: Path, prefix: str):
+            if d.exists():
+                with ThreadPoolExecutor(16) as ex:
+                    list(ex.map(lambda p: up(p, f"{prefix}/{p.relative_to(d).as_posix()}"), sorted(x for x in d.rglob("*") if x.is_file())))
+        ds = Path(st["sfm"]["dataset"])
+        put(label="sfm done", probe=st["probe"], frames={"n": st["frames_n"], "clips": st["frames"]["clips"]}, sfm=st["sfm"],
+            views={k: st["views"][k] for k in ("pano_size", "camera", "views", "images")}, person=st.get("person"))
+        # 1) connectivity + cameras first (the top priority), so they survive whatever happens later
         for f in (ds / "sparse" / "0").glob("*.bin"):
             up(f, f"sparse/{f.name}")
         for f in ("pano360.json", "sfm/pano_poses.json", "sfm/sfm_stdout.log", "sfm/sfm_result.json", "person/person_frac.json", "person/seg.log"):
             up(work / f, f"work/{Path(f).name}")
+        secs = [x for x in st["sfm"].get("secondary_models", []) if x.get("dataset")]
+        for sec in secs:
+            for f in (Path(sec["dataset"]) / "sparse" / "0").glob("*.bin"):
+                up(f, f"m{sec['model']}/sparse/{f.name}")
+            up(Path(sec["poses"]), f"m{sec['model']}/pano_poses.json")
+        # 2) the 360 condition: capture points + photographer-free panoramas (same model, same frame as the 3DGS)
+        navs = {}
+        for mdl in [0] + [x["model"] for x in secs]:
+            put(label=f"360 panoramas (model {mdl})")
+            try:
+                navs[mdl] = nav_stage(work, None, spacing=o["spacing"], camera_height=o["camera_height"], labels=o.get("labels"),
+                                      pano_clip=o.get("pano_clip"), nav_pano_width=o.get("nav_pano_width"), workers=workers, model=mdl)
+                from .pano360_fill import main as fill_main
+                fill_main([str(work), "--model", str(mdl)])
+                navs[mdl]["filled"] = True
+            except Exception as e:  # noqa: BLE001 — keep going: the 3DGS still matters
+                import traceback
+                navs[mdl] = {**navs.get(mdl, {}), "error": str(e)[:300], "trace": traceback.format_exc()[-1500:]}
+            nd = work / ("nav" if not mdl else f"nav_m{mdl}")
+            up_dir(nd, nd.name)
+            up_dir(work / ("nav_filled" if not mdl else f"nav_filled_m{mdl}"), "nav_filled" if not mdl else f"nav_filled_m{mdl}")
+            put(nav=navs)
+        # 3) 3DGS (person-masked loss; falls back to plain gsplat if the masked trainer fails)
+        max_h = float(os.environ.get("MAX_HOURS") or 5)
+        left_h = max_h - (time.time() - res["started"]) / 3600 - 0.6
+        steps = o["steps"]
+        if left_h < 1.2:
+            steps = max(7000, int(steps * max(0.25, left_h / 1.2)))
+        put(label="training", steps=steps, hours_left=round(left_h, 2))
+
+        def progress(d):
+            if d.get("step") and d["step"] % max(1, steps // 10) < steps // 100 + 1:
+                put(label="training", progress=d)
+
+        def train(dset, out, n_steps):
+            try:
+                return train_masked(dset, out, steps=n_steps, cap_max=o["cap"], test_every=o["test_every"], progress=progress,
+                                    steps_scaler=o.get("steps_scaler", 1) if n_steps == o["steps"] else 1, extra=o.get("train_flags") or [])
+            except Exception as e:  # noqa: BLE001
+                from .cloud import train_gsplat_local
+                put(masked_training_error=str(e)[:400])
+                return {**train_gsplat_local(dset, out.parent / (out.name + "_plain"), steps=n_steps, cap_max=o["cap"],
+                                             test_every=o["test_every"], progress=progress), "masked": False}
+        info = train(ds, work / "train", steps)
+        put(label="export", train={k: v for k, v in info.items() if k != "ply"})
+        sdir = ROOT / "scenes" / name
+        build_tour(ds / "sparse" / "0", Path(info["ply"]), sdir, title=o.get("title") or name, capture_height=o["camera_height"])
+        web = export_web(sdir, mobile_max_splats=o.get("mobile_cap"))
+        for f in ("tour.json", "scene.spz", "scene.mobile.spz", "build_report.json", "scene.ply"):
+            up(sdir / f, f"scene/{f}")
         for f in (work / "train" / "result" / "stats").glob("*.json"):
             up(f, f"stats/{f.name}")
         up(work / "train" / "train.log", "train.log")
+        put(label="main scene done", web=web)
+        # 4) places in their own model: a small 3DGS each while time allows
+        sec_out = {}
+        for sec in secs:
+            left_h = max_h - (time.time() - res["started"]) / 3600 - 0.4
+            if left_h < 0.6:
+                sec_out[sec["model"]] = "skipped: no time left"
+                continue
+            try:
+                k = sec["model"]
+                d2 = Path(sec["dataset"])
+                i2 = train(d2, work / f"train_m{k}", min(15000, steps))
+                s2 = ROOT / "scenes" / f"{name}-m{k}"
+                build_tour(d2 / "sparse" / "0", Path(i2["ply"]), s2, title=f"{o.get('title') or name} ({k})", capture_height=o["camera_height"])
+                export_web(s2, mobile_max_splats=o.get("mobile_cap"))
+                for f in ("tour.json", "scene.spz", "scene.mobile.spz", "build_report.json", "scene.ply"):
+                    up(s2 / f, f"scene_m{k}/{f}")
+                sec_out[k] = {kk: v for kk, v in i2.items() if kk != "ply"}
+            except Exception as e:  # noqa: BLE001
+                sec_out[sec["model"]] = f"error: {str(e)[:300]}"
+            put(secondary_scenes=sec_out)
         put(label="done", done=True, seconds=round(time.time() - res["started"]))
     except BaseException as e:  # noqa: BLE001
         import traceback
@@ -1550,7 +1639,7 @@ def main(argv: list[str] | None = None) -> None:
                     files += [{"key": o["Key"], "size": o["Size"], "name": Path(o["Key"]).name} for o in page.get("Contents", [])]
             if not files:
                 raise SystemExit(f"inbox/{a.from_inbox}/ 에 파일이 없어요")
-            pw = None
+            pw = 7680  # the 월하정 originals (probe the files first if unsure)
         else:
             local = expand(a.inputs)
             pr = probe(local)

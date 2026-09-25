@@ -87,13 +87,20 @@ def equirect_person_mask(person_dir: Path, name: str, W: int, H: int, nadir_deg:
 
 
 class Scene:
-    def __init__(self, work: Path):
+    def __init__(self, work: Path, model: int = 0):
         from .colmap_io import read_model
         from .pano360 import viewer_transform
         self.work = work
+        self.model = model
         self.st = json.loads((work / "pano360.json").read_text(encoding="utf-8"))
-        self.poses = json.loads((work / "sfm" / "pano_poses.json").read_text())
-        ds = Path(self.st["sfm"]["dataset"])
+        if model:
+            sec = next(x for x in self.st["sfm"]["secondary_models"] if x["model"] == model)
+            ds = Path(sec["dataset"])
+            self.poses = json.loads(Path(sec["poses"]).read_text())
+        else:
+            ds = Path(self.st["sfm"]["dataset"])
+            self.poses = json.loads((work / "sfm" / "pano_poses.json").read_text())
+        self.dataset = ds
         m = read_model(ds / "sparse" / "0")
         self.xyz = m.xyz[(m.track_len >= 3)] if len(m.xyz) else m.xyz
         self.tf = viewer_transform(ds, None, 1.6)
@@ -389,7 +396,7 @@ class DepthCache:
     def __init__(self, sc: "Scene", W: int, H: int):
         from .pano360_depth import Observed
         self.sc, self.W, self.H = sc, W, H
-        self.obs = Observed(Path(sc.st["sfm"]["dataset"]) / "sparse" / "0")
+        self.obs = Observed(sc.dataset / "sparse" / "0")
         self.cache: dict[str, tuple] = {}
 
     def get(self, name: str, nadir_deg: float):
@@ -594,6 +601,7 @@ def main(argv=None):
     ap.add_argument("--max-sources", type=int, default=12)
     ap.add_argument("--plane", action="store_true", help="old depth model (floor plane + ring of SfM points) instead of Depth Anything")
     ap.add_argument("--nadir-deg", type=float, default=62.0)
+    ap.add_argument("--model", type=int, default=0, help="0 = main SfM model, k = secondary model k (nav_m<k>)")
     ap.add_argument("--apply", action="store_true", help="put the inpainted crops (<job>_filled.jpg) back into the filled panoramas")
     a = ap.parse_args(argv)
     if a.apply:
@@ -610,12 +618,12 @@ def main(argv=None):
         lp.write_text(json.dumps(old + logs, ensure_ascii=False, indent=1), encoding="utf-8")
         print(json.dumps({"applied": len(logs)}))
         return
-    sc = Scene(a.work)
-    out = a.out or a.work / "nav_filled"
+    sc = Scene(a.work, a.model)
+    out = a.out or a.work / ("nav_filled" if not a.model else f"nav_filled_m{a.model}")
     if a.frames:
         names = a.frames.split(",")
     else:
-        nav = json.loads((a.work / "nav" / "nav.json").read_text(encoding="utf-8"))
+        nav = json.loads((a.work / ("nav" if not a.model else f"nav_m{a.model}") / "nav.json").read_text(encoding="utf-8"))
         names = [n["source"]["frame"] for n in nav["nodes"]]
     logs = []
     t = time.time()
