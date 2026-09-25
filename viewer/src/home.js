@@ -269,15 +269,23 @@ async function refresh() {
   G.textContent = "";
   if (!scenes.length) G.innerHTML = `<div class="empty">아직 완성된 공간이 없어요.</div>`;
   for (const s of scenes) {
-    const a = document.createElement("a");
-    a.className = "card scene";
-    a.href = s.href;
-    a.innerHTML = `<div class="cover"></div><div class="body"><div class="t"></div><div class="s"></div><div class="meta"></div></div>`;
-    if (s.cover) a.querySelector(".cover").style.backgroundImage = `url("${s.base}${s.cover}")`;
-    a.querySelector(".t").textContent = s.title || s.name;
-    a.querySelector(".s").textContent = s.subtitle || "";
-    a.querySelector(".meta").textContent = [s.nodes && `시점 ${s.nodes}곳`, s.photos && `원본 사진 ${s.photos}장`].filter(Boolean).join(" · ");
-    G.appendChild(a);
+    // The card opens the tour; a second button opens it straight on the source photos.
+    const card = document.createElement("div");
+    card.className = "card scene";
+    card.innerHTML = `<a class="main"><div class="cover"></div><div class="body"><div class="t"></div><div class="s"></div><div class="meta"></div></div></a><div class="actions"><a class="act go">3D로 둘러보기</a></div>`;
+    card.querySelector(".main").href = card.querySelector(".go").href = s.href;
+    if (s.cover) card.querySelector(".cover").style.backgroundImage = `url("${s.base}${s.cover}")`;
+    card.querySelector(".t").textContent = s.title || s.name;
+    card.querySelector(".s").textContent = s.subtitle || "";
+    card.querySelector(".meta").textContent = s.nodes ? `시점 ${s.nodes}곳` : "";
+    if (s.photos) {
+      const p = document.createElement("a");
+      p.className = "act photos";
+      p.href = `${s.href}&photos=1`;
+      p.textContent = `원본 사진 보기 (${s.photos}장)`;
+      card.querySelector(".actions").appendChild(p);
+    }
+    G.appendChild(card);
   }
   const list = (jobs?.jobs || []).filter((j) => j.state !== "done");
   $("#jobsWrap").hidden = !list.length;

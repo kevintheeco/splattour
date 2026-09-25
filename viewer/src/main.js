@@ -130,7 +130,11 @@ async function main() {
   const photosBtn = document.querySelector('[data-act="photos"]');
   const photos = new Photos({ tour, nav, look, rig, toast });
   photos.onClose = () => photosBtn.classList.remove("on");
-  photos.load().then((ok) => { photosBtn.hidden = !ok; }).catch((e) => console.warn("[photos]", e));
+  photos.load().then((ok) => {
+    photosBtn.hidden = !ok;
+    // ?photos=1 (the home page's "원본 사진 보기"): open straight on the photo list
+    if (ok && params.get("photos") === "1") { photos.toggle(true); photosBtn.classList.add("on"); }
+  }).catch((e) => console.warn("[photos]", e));
   const pano = new PanoMode({ renderer, spark, scene, splat, hideObjects: [hotspots.group, hotspots.cursor] });
 
   // ---------- lighting & sound ----------
