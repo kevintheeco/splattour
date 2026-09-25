@@ -18,7 +18,7 @@ export class Tour {
     this.subtitle = data.subtitle || "";
     this.eyeHeight = data.eyeHeight ?? 1.55;
     // Which splat file to load (?quality=full|mobile|lod overrides the choice):
-    //  - desktop: the full scene (data.splat), unchanged.
+    //  - desktop: the streamed tree when the scene has one (see below), else the full scene.
     //  - phone, scene with a streamed level-of-detail tree (data.lod): a ladder,
     //    best first: streamed tree (full SH3 colour, first view in seconds) ->
     //    the desktop file -> the lighter SH-1 file. If iOS kills the tab while a
@@ -31,6 +31,11 @@ export class Tour {
     const lod = data.lod?.splat ? data.lod : null;
     let mode = "full";
     if (q === "lod" && lod) mode = "lod";
+    // desktop with a tree: stream it too, so the first view appears in seconds
+    // instead of after the whole file (125 MB for 월하정); it refines to the
+    // full scene (desktop pool/splat budget below). The full file stays the
+    // fallback if streaming fails.
+    else if (!q && !phone && lod) mode = "lod";
     else if (q === "mobile" && data.splatMobile) mode = "mobile";
     else if (!q && phone) {
       const ladder = lod ? ["lod", "full", ...(data.splatMobile ? ["mobile"] : [])] : [data.splatMobile ? "mobile" : "full"];

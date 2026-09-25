@@ -1,34 +1,208 @@
 {
-  "version": 1,
-  "about": "촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터, y 위, 시선 -Z가 yaw 0). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도, 왼쪽으로 돌면 +).",
-  "status": {
-    "ready": false,
-    "pendingLabel": "360 촬영본 준비 중 (월요일 도착 예정)",
-    "devPlaceholder": true,
-    "note": "360 원본(교수님 보관, 2026-09-28 월요일 도착 예정)을 받기 전 개발용 자리표시. 지점 위치는 도면 없이 짐작한 것. 원본이 오면 scripts/import-360.mjs로 이 파일을 다시 만든다. 실험에 쓰지 말 것.",
-    "positionsApproximate": true
+ "version": 1,
+ "about": "촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터, y 위, 시선 -Z가 yaw 0). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도, 왼쪽으로 돌면 +).",
+ "status": {
+  "ready": false,
+  "pendingLabel": "360 촬영본 준비 중 (월요일 도착 예정)",
+  "devPlaceholder": true,
+  "note": "촬영 지점 = 3DGS(scenes/wolhajeong) tour.json 노드 실제 좌표(2026-09-25). 360 원본(inbox 20260925-ccc8575c1d1f)으로 파노라마를 만들면 pano 채움. 실내(사랑방 등)는 360 처리 후 추가.",
+  "positionsApproximate": false
+ },
+ "transition": {
+  "style": "warp",
+  "duration": 0.8
+ },
+ "range": {
+  "radius": 1.5
+ },
+ "start": "n0",
+ "rooms": [
+  {
+   "id": "gate",
+   "name": "대문"
   },
-  "transition": { "style": "warp", "duration": 0.8 },
-  "range": { "radius": 2.0 },
-  "start": "g1",
-  "rooms": [
-    { "id": "gate", "name": "대문" },
-    { "id": "entry", "name": "진입로" },
-    { "id": "yard", "name": "앞마당" },
-    { "id": "anchae", "name": "안채" },
-    { "id": "sarang", "name": "별채 사랑방" },
-    { "id": "jeongja", "name": "정자·야외 테이블" },
-    { "id": "kitchen", "name": "부엌" }
-  ],
-  "nodes": [
-    { "id": "g1", "room": "gate", "position": [-3.5, 1.5, 5.0], "imageYawDeg": 0, "pano": null, "neighbors": ["g2"] },
-    { "id": "g2", "room": "entry", "position": [-3.5, 1.5, 3.0], "imageYawDeg": 0, "pano": null, "neighbors": ["g1", "y1", "s1"] },
-    { "id": "s1", "room": "sarang", "position": [-0.5, 1.5, 3.6], "imageYawDeg": -90, "pano": null, "neighbors": ["g2", "y1"] },
-    { "id": "y1", "room": "yard", "position": [-1.6, 1.5, 1.4], "imageYawDeg": 0, "pano": null, "neighbors": ["g2", "s1", "y2", "y3", "k1"] },
-    { "id": "y2", "room": "yard", "position": [1.2, 1.5, 0.8], "imageYawDeg": 0, "pano": null, "neighbors": ["y1", "y3", "j1"] },
-    { "id": "y3", "room": "yard", "position": [-0.2, 1.5, -1.3], "imageYawDeg": 0, "pano": null, "neighbors": ["y1", "y2", "a1", "k1", "j1"] },
-    { "id": "a1", "room": "anchae", "position": [0.2, 1.5, -3.6], "imageYawDeg": 180, "pano": null, "neighbors": ["y3", "k1"] },
-    { "id": "k1", "room": "kitchen", "position": [-3.2, 1.5, -2.4], "imageYawDeg": 90, "pano": null, "neighbors": ["y1", "y3", "a1"] },
-    { "id": "j1", "room": "jeongja", "position": [3.4, 1.5, -1.2], "imageYawDeg": -90, "pano": null, "neighbors": ["y2", "y3"] }
-  ]
+  {
+   "id": "yard",
+   "name": "앞마당"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "n0",
+   "room": "yard",
+   "position": [
+    0.7945,
+    1.45,
+    2.2781
+   ],
+   "imageYawDeg": -152.6,
+   "pano": null,
+   "neighbors": [
+    "n1",
+    "n10",
+    "n4"
+   ]
+  },
+  {
+   "id": "n1",
+   "room": "yard",
+   "position": [
+    0.2713,
+    1.45,
+    3.6114
+   ],
+   "imageYawDeg": -152.9,
+   "pano": null,
+   "neighbors": [
+    "n0",
+    "n10",
+    "n2",
+    "n5"
+   ]
+  },
+  {
+   "id": "n2",
+   "room": "yard",
+   "position": [
+    -0.4155,
+    1.45,
+    6.7533
+   ],
+   "imageYawDeg": -143.9,
+   "pano": null,
+   "neighbors": [
+    "n1",
+    "n3",
+    "n5",
+    "n6"
+   ]
+  },
+  {
+   "id": "n3",
+   "room": "yard",
+   "position": [
+    2.5127,
+    1.45,
+    4.6313
+   ],
+   "imageYawDeg": 59.9,
+   "pano": null,
+   "neighbors": [
+    "n10",
+    "n2",
+    "n9"
+   ]
+  },
+  {
+   "id": "n4",
+   "room": "gate",
+   "position": [
+    -0.3738,
+    1.45,
+    0.6565
+   ],
+   "imageYawDeg": -127.8,
+   "pano": null,
+   "neighbors": [
+    "n0",
+    "n5",
+    "n8"
+   ]
+  },
+  {
+   "id": "n5",
+   "room": "yard",
+   "position": [
+    -0.5069,
+    1.45,
+    4.661
+   ],
+   "imageYawDeg": -127.7,
+   "pano": null,
+   "neighbors": [
+    "n1",
+    "n2",
+    "n4",
+    "n6"
+   ]
+  },
+  {
+   "id": "n6",
+   "room": "yard",
+   "position": [
+    0.1952,
+    1.45,
+    7.9397
+   ],
+   "imageYawDeg": -31.7,
+   "pano": null,
+   "neighbors": [
+    "n2",
+    "n5",
+    "n7"
+   ]
+  },
+  {
+   "id": "n7",
+   "room": "yard",
+   "position": [
+    1.3528,
+    1.45,
+    6.9918
+   ],
+   "imageYawDeg": 6.7,
+   "pano": null,
+   "neighbors": [
+    "n6",
+    "n9"
+   ]
+  },
+  {
+   "id": "n8",
+   "room": "gate",
+   "position": [
+    0.725,
+    1.45,
+    -0.3376
+   ],
+   "imageYawDeg": -82.9,
+   "pano": null,
+   "neighbors": [
+    "n4"
+   ]
+  },
+  {
+   "id": "n9",
+   "room": "yard",
+   "position": [
+    2.4238,
+    1.45,
+    6.0222
+   ],
+   "imageYawDeg": 51.6,
+   "pano": null,
+   "neighbors": [
+    "n10",
+    "n3",
+    "n7"
+   ]
+  },
+  {
+   "id": "n10",
+   "room": "yard",
+   "position": [
+    1.5794,
+    1.45,
+    3.5508
+   ],
+   "imageYawDeg": 162.2,
+   "pano": null,
+   "neighbors": [
+    "n0",
+    "n1",
+    "n3",
+    "n9"
+   ]
+  }
+ ]
 }

@@ -105,13 +105,15 @@ async function main() {
   // where Spark's iOS default 1.5M gives 30.8 / 0.905. ?pages=, ?lodcount=,
   // ?lodscale= tune it on a real phone.
   const lodMode = tour.splatMode === "lod";
-  const maxPages = Math.max(4, Math.round(+params.get("pages") || 40));
+  // desktop streams the whole tree at full density (pool up to 128 pages ≈ 8.4M
+  // splats, budget 6M) so the end result matches the full file
+  const maxPages = Math.max(4, Math.round(+params.get("pages") || (tour.phone ? 40 : 128)));
   spark = new SparkRenderer(
     lodMode
       ? {
           renderer,
           maxPagedSplats: maxPages * 65536,
-          lodSplatCount: +params.get("lodcount") || 2_000_000,
+          lodSplatCount: +params.get("lodcount") || (tour.phone ? 2_000_000 : 6_000_000),
           lodSplatScale: +params.get("lodscale") || 1,
         }
       : { renderer },

@@ -1,0 +1,32 @@
+{
+ "version": 1,
+ "scene": "wolhajeong",
+ "bakedAt": "2026-09-25T13:53:46.863Z",
+ "about": "Plan frame: u = x cos r + z sin r, w = -x sin r + z cos r (metres, scene coordinates); image pixel = ((u - bounds[0]) * pxPerM, (w - bounds[1]) * pxPerM). Up on the plan = -w.",
+ "rotation": 2.37365,
+ "bounds": [
+  -2.635,
+  -7.38,
+  8.365,
+  2.37
+ ],
+ "pxPerM": 96,
+ "image": "plan.png",
+ "roomImage": "plan-rooms.png",
+ "rooms": {
+  "gate": {
+   "color": 10,
+   "label": [
+    0.01,
+    -0.004
+   ]
+  },
+  "yard": {
+   "color": 20,
+   "label": [
+    0.445,
+    5.485
+   ]
+  }
+ }
+}
