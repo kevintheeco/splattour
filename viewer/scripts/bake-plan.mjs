@@ -95,6 +95,28 @@ const res = await page.evaluate(async ({ space, scene, P, ROT, q }) => {
     return best;
   });
   let inside = flood(seeds, free);
+  // Raised floors (nav floorY from scripts/space-from-scene.mjs, e.g. a 거실
+  // 0.7 m above the courtyard): the same flood at that height, a little looser
+  // (interiors reconstruct noisier), seeded by the points standing there.
+  const eyeH = tour.eyeHeight ?? 1.45;
+  const upper = [...new Set(nav.nodes.map((n) => n.floorY ?? +(n.position[1] - eyeH).toFixed(2)).filter((y) => y - fy > 0.25))];
+  for (const L of upper) {
+    const freeL = and(erode(dilate(band(L - 0.2, L + 0.3), 3), 3), not(band(L + 0.45, L + 1.6)));
+    const seedsL = nav.nodes.filter((n) => Math.abs((n.floorY ?? n.position[1] - eyeH) - L) < 0.1).map((n) => {
+      const [cx, cz] = [Math.floor((n.position[0] - o.box.min.x) / v), Math.floor((n.position[2] - o.box.min.z) / v)];
+      let best = -1, bd = 1e9;
+      const R = Math.ceil(1 / v);
+      for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) {
+        const X = cx + dx, Z = cz + dz;
+        if (X < 0 || Z < 0 || X >= nx || Z >= nz || !freeL[Z * nx + X]) continue;
+        const d = dx * dx + dz * dz;
+        if (d < bd) { bd = d; best = Z * nx + X; }
+      }
+      return best;
+    });
+    const inL = flood(seedsL, freeL);
+    for (let i = 0; i < N; i++) if (inL[i]) inside[i] = 1;
+  }
   inside = erode(dilate(inside, 4), 4); // close gaps
   const border = [];
   for (let x = 0; x < nx; x++) border.push(x, (nz - 1) * nx + x);

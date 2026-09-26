@@ -1,31 +1,38 @@
 {
  "version": 1,
- "scene": "wolhajeong",
- "bakedAt": "2026-09-25T13:53:46.863Z",
+ "scene": "wolhajeong360-hq",
+ "bakedAt": "2026-09-26T02:12:38.936Z",
  "about": "Plan frame: u = x cos r + z sin r, w = -x sin r + z cos r (metres, scene coordinates); image pixel = ((u - bounds[0]) * pxPerM, (w - bounds[1]) * pxPerM). Up on the plan = -w.",
- "rotation": 2.37365,
+ "rotation": 3.02815,
  "bounds": [
-  -2.635,
-  -7.38,
-  8.365,
-  2.37
+  -2.152,
+  -3.583,
+  11.098,
+  7.417
  ],
  "pxPerM": 96,
  "image": "plan.png",
  "roomImage": "plan-rooms.png",
  "rooms": {
-  "gate": {
+  "yard": {
    "color": 10,
    "label": [
-    0.01,
-    -0.004
+    -4.207,
+    -1.827
    ]
   },
-  "yard": {
+  "living": {
    "color": 20,
    "label": [
-    0.445,
-    5.485
+    -6.905,
+    0.996
+   ]
+  },
+  "dark": {
+   "color": 30,
+   "label": [
+    -5.713,
+    2.622
    ]
   }
  }

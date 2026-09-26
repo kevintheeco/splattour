@@ -1,0 +1,213 @@
+{
+ "version": 1,
+ "about": "촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터, y 위, 시선 -Z가 yaw 0). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도, 왼쪽으로 돌면 +).",
+ "status": {
+  "ready": false,
+  "pendingLabel": "360 촬영본 준비 중 (월요일 도착 예정)",
+  "devPlaceholder": true,
+  "note": "촬영 지점 = 3DGS(scenes/wolhajeong) tour.json 노드 실제 좌표(2026-09-25). 360 원본(inbox 20260925-ccc8575c1d1f)으로 파노라마를 만들면 pano 채움. 실내(사랑방 등)는 360 처리 후 추가.",
+  "positionsApproximate": false
+ },
+ "transition": {
+  "style": "warp",
+  "duration": 0.8
+ },
+ "range": {
+  "radius": 1.5
+ },
+ "start": "n0",
+ "rooms": [
+  {
+   "id": "gate",
+   "name": "대문"
+  },
+  {
+   "id": "yard",
+   "name": "앞마당"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "n0",
+   "room": "yard",
+   "position": [
+    0.7945,
+    1.45,
+    2.2781
+   ],
+   "imageYawDeg": -152.6,
+   "pano": null,
+   "neighbors": [
+    "n1",
+    "n10",
+    "n4"
+   ]
+  },
+  {
+   "id": "n1",
+   "room": "yard",
+   "position": [
+    0.2713,
+    1.45,
+    3.6114
+   ],
+   "imageYawDeg": -152.9,
+   "pano": null,
+   "neighbors": [
+    "n0",
+    "n10",
+    "n2",
+    "n5"
+   ]
+  },
+  {
+   "id": "n2",
+   "room": "yard",
+   "position": [
+    -0.4155,
+    1.45,
+    6.7533
+   ],
+   "imageYawDeg": -143.9,
+   "pano": null,
+   "neighbors": [
+    "n1",
+    "n3",
+    "n5",
+    "n6"
+   ]
+  },
+  {
+   "id": "n3",
+   "room": "yard",
+   "position": [
+    2.5127,
+    1.45,
+    4.6313
+   ],
+   "imageYawDeg": 59.9,
+   "pano": null,
+   "neighbors": [
+    "n10",
+    "n2",
+    "n9"
+   ]
+  },
+  {
+   "id": "n4",
+   "room": "gate",
+   "position": [
+    -0.3738,
+    1.45,
+    0.6565
+   ],
+   "imageYawDeg": -127.8,
+   "pano": null,
+   "neighbors": [
+    "n0",
+    "n5",
+    "n8"
+   ]
+  },
+  {
+   "id": "n5",
+   "room": "yard",
+   "position": [
+    -0.5069,
+    1.45,
+    4.661
+   ],
+   "imageYawDeg": -127.7,
+   "pano": null,
+   "neighbors": [
+    "n1",
+    "n2",
+    "n4",
+    "n6"
+   ]
+  },
+  {
+   "id": "n6",
+   "room": "yard",
+   "position": [
+    0.1952,
+    1.45,
+    7.9397
+   ],
+   "imageYawDeg": -31.7,
+   "pano": null,
+   "neighbors": [
+    "n2",
+    "n5",
+    "n7"
+   ]
+  },
+  {
+   "id": "n7",
+   "room": "yard",
+   "position": [
+    1.3528,
+    1.45,
+    6.9918
+   ],
+   "imageYawDeg": 6.7,
+   "pano": null,
+   "neighbors": [
+    "n6",
+    "n9"
+   ]
+  },
+  {
+   "id": "n8",
+   "room": "gate",
+   "position": [
+    0.725,
+    1.45,
+    -0.3376
+   ],
+   "imageYawDeg": -82.9,
+   "pano": null,
+   "neighbors": [
+    "n4"
+   ]
+  },
+  {
+   "id": "n9",
+   "room": "yard",
+   "position": [
+    2.4238,
+    1.45,
+    6.0222
+   ],
+   "imageYawDeg": 51.6,
+   "pano": null,
+   "neighbors": [
+    "n10",
+    "n3",
+    "n7"
+   ]
+  },
+  {
+   "id": "n10",
+   "room": "yard",
+   "position": [
+    1.5794,
+    1.45,
+    3.5508
+   ],
+   "imageYawDeg": 162.2,
+   "pano": null,
+   "neighbors": [
+    "n0",
+    "n1",
+    "n3",
+    "n9"
+   ]
+  }
+ ],
+ "doorFx": {
+  "duration": 0.9,
+  "sound": true,
+  "note": "문 여는 연출 설정(두 조건 공통). 문은 실제 문이 있는 자리에만 둔다(대표 결정 2026-09-26: 왜곡 금지). 대문간–앞마당 사이에는 실제 문짝이 없어 문을 두지 않는다. 실제 대문은 통로 거리 쪽 끝(탐색 범위 밖)."
+ }
+}

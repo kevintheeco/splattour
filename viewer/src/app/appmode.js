@@ -17,6 +17,14 @@ export async function prepare({ params, tour }) {
   const nav = listing ? await loadNav(spaceId, listing, params.get("navfile")).catch(() => null) : null;
   document.documentElement.classList.add("app-mode");
   if (listing) document.title = `${listing.title} · 3DGS 자유 시점 탐색`;
+  // nav.json generated for this scene (scripts/space-from-scene.mjs) knows the
+  // floor under each capture point (a 거실 above the courtyard): eyes and walking levels follow it
+  if (nav?.scene && nav.scene === (params.get("scene") || "")) {
+    for (const n of tour.nodes) {
+      const m = nav.byId.get(n.id);
+      if (m && Number.isFinite(m.floorY)) { n.floorY = m.floorY; n.position.y = m.floorY + tour.eyeHeight; }
+    }
+  }
   // markers and labels speak the same room names as the 360° tour
   if (nav) for (const n of tour.nodes) n.name = nav.roomName(nav.nearest(n.position.x, n.position.z).node.room);
   return new AppMode({ params, tour, listing, nav, spaceId });

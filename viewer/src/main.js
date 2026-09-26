@@ -594,6 +594,18 @@ async function main() {
     let goal, lookAt = null;
     const hitY = o.y + dir.y * dist;
     const hitP = o.clone().addScaledVector(dir, dist);
+    // Tapped into another room you can't walk into (behind a wall or a door the
+    // reconstruction closed, e.g. 월하정 거실) that the tour links to: go there
+    // the way the tour moves between separate parts, fading through black.
+    if (dist < 25) {
+      // (the capture point near the tapped surface, or just behind it: a glass door)
+      const behind = hitP.clone().addScaledVector(dir, 1.0);
+      const here = tour.nearestNode(rig.position);
+      const cand = [tour.nearestNode(hitP, { maxDist: 2.0 }), tour.nearestNode(behind, { maxDist: 2.0 })].filter((n) => n && n !== here);
+      const far = cand.find((n) => app?.nav?.byId.get(n.id)?.room !== app?.nav?.byId.get(here.id)?.room) || null;
+      const roomOf = (n) => app?.nav?.byId.get(n.id)?.room;
+      if (far && far !== here && roomOf(far) && roomOf(far) !== roomOf(here) && tour.path(here, far) && !planWalk(rig.position, far.position)) { hideHint(); fadeJump(far); return; }
+    }
     const hitFloor = dist < 25 ? walkMap.heightAt(walkMap.level(fy), hitP.x, hitP.z) : NaN;
     // a walkable floor at another height (a 마루, a step) is a floor click too
     if (Number.isFinite(hitFloor) && Math.abs(hitFloor - fy) > 0.1 && Math.abs(hitY - hitFloor) < 0.2) goal = hitP;
@@ -626,7 +638,15 @@ async function main() {
       return;
     }
     hideHint();
-    if (!nav.goToPoint(eye, { lookAt })) toast("거기까지 걸어갈 길이 없어요");
+    if (nav.goToPoint(eye, { lookAt })) return;
+    // No walkable way (a room behind a wall or a door the reconstruction closed,
+    // e.g. 월하정 거실): if a capture point there is linked to where we are in
+    // the tour graph, go there the way the tour does between separate parts,
+    // fading through black like a door.
+    const target = tour.nearestNode(eye, { maxDist: 2.5 });
+    const here = tour.nearestNode(rig.position);
+    if (target && target !== here && tour.path(here, target)) { fadeJump(target); return; }
+    toast("거기까지 걸어갈 길이 없어요");
   }
 
   // Double-click an object → fly up to it and look at it ("다가가 보기", ?move=fly).

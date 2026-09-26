@@ -1,11 +1,19 @@
 {
  "version": 1,
  "about": "촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터, y 위, 시선 -Z가 yaw 0). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도, 왼쪽으로 돌면 +).",
+ "scene": "wolhajeong360-hq",
+ "generated": {
+  "by": "viewer/scripts/space-from-scene.mjs",
+  "at": "2026-09-26T02:12:36.969Z",
+  "from": "scenes/wolhajeong360-hq/tour.json + capture_path.json",
+  "labels": "data/pano360/wolhajeong360.labels.draft.json",
+  "addedPoints": 2
+ },
  "status": {
   "ready": false,
   "pendingLabel": "360 촬영본 준비 중 (월요일 도착 예정)",
   "devPlaceholder": true,
-  "note": "촬영 지점 = 3DGS(scenes/wolhajeong) tour.json 노드 실제 좌표(2026-09-25). 360 원본(inbox 20260925-ccc8575c1d1f)으로 파노라마를 만들면 pano 채움. 실내(사랑방 등)는 360 처리 후 추가.",
+  "note": "촬영 지점은 3DGS wolhajeong360-hq의 좌표계(자동 생성). 360 원본 파노라마는 아직 이 좌표계에 맞춰 넣지 않아 360° 조건은 준비 중.",
   "positionsApproximate": false
  },
  "transition": {
@@ -15,15 +23,19 @@
  "range": {
   "radius": 1.5
  },
- "start": "n0",
+ "start": "n1",
  "rooms": [
-  {
-   "id": "gate",
-   "name": "대문"
-  },
   {
    "id": "yard",
    "name": "앞마당"
+  },
+  {
+   "id": "living",
+   "name": "안채 거실"
+  },
+  {
+   "id": "dark",
+   "name": "어두운 실내"
   }
  ],
  "nodes": [
@@ -31,178 +43,281 @@
    "id": "n0",
    "room": "yard",
    "position": [
-    0.7945,
+    -0.7862,
     1.45,
-    2.2781
+    0.0457
    ],
-   "imageYawDeg": -152.6,
-   "pano": null,
+   "imageYawDeg": 59.7,
    "neighbors": [
     "n1",
-    "n10",
-    "n4"
-   ]
+    "n8"
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_01131.jpg"
   },
   {
    "id": "n1",
    "room": "yard",
    "position": [
-    0.2713,
+    -2.2616,
     1.45,
-    3.6114
+    -0.1514
    ],
-   "imageYawDeg": -152.9,
-   "pano": null,
+   "imageYawDeg": 60,
    "neighbors": [
     "n0",
-    "n10",
     "n2",
-    "n5"
-   ]
+    "n7"
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_01208.jpg"
   },
   {
    "id": "n2",
    "room": "yard",
    "position": [
-    -0.4155,
+    -2.7211,
     1.45,
-    6.7533
+    -1.3694
    ],
-   "imageYawDeg": -143.9,
-   "pano": null,
+   "imageYawDeg": 60.1,
    "neighbors": [
     "n1",
     "n3",
-    "n5",
-    "n6"
-   ]
+    "n7"
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_01283.jpg"
   },
   {
    "id": "n3",
    "room": "yard",
    "position": [
-    2.5127,
+    -3.221,
     1.45,
-    4.6313
+    -2.6265
    ],
    "imageYawDeg": 59.9,
-   "pano": null,
    "neighbors": [
-    "n10",
     "n2",
-    "n9"
-   ]
+    "n4"
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_01393.jpg"
   },
   {
    "id": "n4",
-   "room": "gate",
+   "room": "yard",
    "position": [
-    -0.3738,
+    -4.4808,
     1.45,
-    0.6565
+    -3.6739
    ],
-   "imageYawDeg": -127.8,
-   "pano": null,
+   "imageYawDeg": 59.9,
    "neighbors": [
-    "n0",
-    "n5",
-    "n8"
-   ]
+    "n3",
+    "n5"
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_01497.jpg"
   },
   {
    "id": "n5",
    "room": "yard",
    "position": [
-    -0.5069,
+    -5.8244,
     1.45,
-    4.661
+    -4.1775
    ],
-   "imageYawDeg": -127.7,
-   "pano": null,
+   "imageYawDeg": 59.7,
    "neighbors": [
-    "n1",
-    "n2",
     "n4",
     "n6"
-   ]
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_01601.jpg"
   },
   {
    "id": "n6",
    "room": "yard",
    "position": [
-    0.1952,
+    -6.2634,
     1.45,
-    7.9397
+    -2.9156
    ],
-   "imageYawDeg": -31.7,
-   "pano": null,
+   "imageYawDeg": 59.4,
    "neighbors": [
-    "n2",
     "n5",
+    "n10",
     "n7"
-   ]
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_01739.jpg"
   },
   {
    "id": "n7",
    "room": "yard",
    "position": [
-    1.3528,
+    -3.7303,
     1.45,
-    6.9918
+    -0.1581
    ],
-   "imageYawDeg": 6.7,
-   "pano": null,
+   "imageYawDeg": 58.9,
    "neighbors": [
+    "n1",
+    "n2",
     "n6",
     "n9"
-   ]
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_02062.jpg"
   },
   {
    "id": "n8",
-   "room": "gate",
+   "room": "yard",
    "position": [
-    0.725,
+    0.3211,
     1.45,
-    -0.3376
+    0.8186
    ],
-   "imageYawDeg": -82.9,
-   "pano": null,
+   "imageYawDeg": 58.1,
    "neighbors": [
-    "n4"
-   ]
+    "n0",
+    "n14",
+    "n9"
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c00_03842.jpg"
   },
   {
    "id": "n9",
    "room": "yard",
    "position": [
-    2.4238,
-    1.45,
-    6.0222
+    -5.5539,
+    2.15,
+    0.7999
    ],
-   "imageYawDeg": 51.6,
-   "pano": null,
+   "imageYawDeg": 57.5,
    "neighbors": [
+    "n7",
+    "n8",
     "n10",
-    "n3",
-    "n7"
-   ]
+    "n11",
+    "n13",
+    "c1"
+   ],
+   "floorY": 0.7,
+   "source": "pano_camera0/c00_04704.jpg"
   },
   {
    "id": "n10",
    "room": "yard",
    "position": [
-    1.5794,
+    -5.9657,
     1.45,
-    3.5508
+    -0.5999
    ],
-   "imageYawDeg": 162.2,
-   "pano": null,
+   "imageYawDeg": 64.9,
    "neighbors": [
-    "n0",
-    "n1",
-    "n3",
+    "n6",
     "n9"
-   ]
+   ],
+   "floorY": 0,
+   "source": "pano_camera0/c01_01919.jpg"
+  },
+  {
+   "id": "n11",
+   "room": "living",
+   "position": [
+    -6.1886,
+    2.15,
+    2.1927
+   ],
+   "imageYawDeg": 69,
+   "neighbors": [
+    "n12",
+    "n9",
+    "c2"
+   ],
+   "floorY": 0.7,
+   "source": "pano_camera0/c01_09156.jpg"
+  },
+  {
+   "id": "n12",
+   "room": "living",
+   "position": [
+    -8.0221,
+    2.15,
+    0.2454
+   ],
+   "imageYawDeg": 70.1,
+   "neighbors": [
+    "n11"
+   ],
+   "floorY": 0.7,
+   "source": "pano_camera0/c01_09508.jpg"
+  },
+  {
+   "id": "n13",
+   "room": "living",
+   "position": [
+    -3.9975,
+    2.15,
+    1.963
+   ],
+   "imageYawDeg": 69.4,
+   "neighbors": [
+    "n9"
+   ],
+   "floorY": 0.7,
+   "source": "pano_camera0/c01_10789.jpg"
+  },
+  {
+   "id": "n14",
+   "room": "yard",
+   "position": [
+    0.4697,
+    1.45,
+    2.0708
+   ],
+   "imageYawDeg": -160,
+   "neighbors": [
+    "n8"
+   ],
+   "floorY": 0,
+   "source": "pano_camera5/c01_02586.jpg"
+  },
+  {
+   "id": "c1",
+   "room": "dark",
+   "position": [
+    -5.2565,
+    2.15,
+    1.494
+   ],
+   "imageYawDeg": 58.2,
+   "neighbors": [
+    "n9"
+   ],
+   "floorY": 0.7,
+   "source": "pano_camera0/c00_05106.jpg",
+   "added": true
+  },
+  {
+   "id": "c2",
+   "room": "dark",
+   "position": [
+    -6.1265,
+    2.15,
+    2.7575
+   ],
+   "imageYawDeg": 58,
+   "neighbors": [
+    "n11"
+   ],
+   "floorY": 0.7,
+   "source": "pano_camera0/c00_05359.jpg",
+   "added": true
   }
  ],
  "doorFx": {
