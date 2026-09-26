@@ -53,7 +53,7 @@ def export_photos(scene: str, model_dir: Path, images_dir: Path, full: int = 160
         img = cv2.imdecode(np.fromfile(str(src), np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             continue
-        stem = Path(im.name).stem
+        stem = Path(im.name).with_suffix("").as_posix().replace("/", "__")  # rig views: pano_camera<i>/<frame> share the frame name
         total += _write_webp(out / "f" / f"{stem}.webp", _fit(img, full), quality)
         total += _write_webp(out / "t" / f"{stem}.webp", _fit(img, thumb), 72)
         cam = m.cameras[im.camera_id]
