@@ -94,6 +94,7 @@ def curves(tr: Path, out: Path) -> str | None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     cnt, ev, loss = _csv(tr / "counts.csv"), _csv(tr / "eval.csv"), _csv(tr / "loss.csv")
+    ev = [r for r in ev if r["iteration"].isdigit()]  # final_full / final_pruned rows are the prune check
     if not (cnt or ev or loss):
         return None
     fig, ax = plt.subplots(1, 3, figsize=(15, 4.2))
