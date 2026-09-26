@@ -171,12 +171,35 @@ html.pseudo-fs #app { height: 100dvh; }
 
 /* 3DGS viewer inside the app: its own tool UI gives way to the shared chrome */
 html.app-mode #brand, html.app-mode #tools, html.app-mode #strip, html.app-mode #stripToggle, html.app-mode #lamps,
-html.app-mode #minimap, html.app-mode #mood, html.app-mode #photos, html.app-mode #photoBox, html.app-mode #photoCompare { display: none !important; }
+html.app-mode #minimap { display: none !important; }
+/* tool panels open from the ≡ menu (app/appmode.js); keep them clear of the top bar */
+html.app-mode #mood, html.app-mode #photos { z-index: 7; }
+@media (max-width: 600px) { html.app-mode #mood { bottom: calc(150px + var(--sab)); max-height: 46vh; } }
 html.app-mode #toast { top: auto; bottom: calc(76px + var(--sab)); }
 html.app-mode #streamPill { top: auto; bottom: calc(20px + var(--sab)); }
 html.app-mode .hint { top: 55%; }
 
 /* 원본 / AI 보정 switch (demo only, hidden in study mode) */
-.vc-variant { display: flex; align-items: center; gap: 2px; height: 44px; padding: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-sizing: border-box; }
-.vc-variant button { border: 0; background: transparent; color: #444; font: inherit; font-size: 12.5px; font-weight: 700; padding: 0 11px; height: 36px; white-space: nowrap; border-radius: 999px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.vc-variant button.on { background: #1f1f22; color: #fff; }
+
+/* ---------- menu (≡): tools of each viewer, top-right under the bar ---------- */
+.vc-menu { position: absolute; inset: 0; z-index: 6; background: rgba(12, 12, 14, 0); transition: background 0.22s var(--vc-ease); }
+.vc-menu.open { background: rgba(12, 12, 14, 0.18); }
+.vc-menu-card {
+  position: absolute; right: calc(12px + var(--sar)); top: calc(62px + var(--sat)); min-width: 220px; max-width: calc(100vw - 24px); max-height: calc(100vh - 80px - var(--sat) - var(--sab)); overflow: auto;
+  background: var(--vc-card, rgba(255, 255, 255, 0.94)); border-radius: 20px; box-shadow: var(--vc-shadow); padding: 6px; -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  transform-origin: top right; transform: scale(0.94) translateY(-4px); opacity: 0; transition: transform 0.22s var(--vc-ease), opacity 0.18s var(--vc-ease);
+}
+.vc-menu.open .vc-menu-card { transform: none; opacity: 1; }
+.vc-menu-item { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: transparent; font: inherit; font-size: 15px; font-weight: 600; color: var(--vc-ink, #1f1f22); padding: 11px 12px; border-radius: 14px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.vc-menu-item:active { background: rgba(0, 0, 0, 0.06); }
+.vc-menu-ic { width: 34px; height: 34px; border-radius: 11px; background: rgba(0, 0, 0, 0.05); display: grid; place-items: center; flex: none; }
+.vc-menu-ic .ic { width: 19px; height: 19px; stroke-width: 1.7; }
+.vc-menu-label { flex: 1; white-space: nowrap; }
+.vc-menu-state { font-size: 12px; font-weight: 700; color: var(--vc-muted, #888); }
+.vc-menu-item.on .vc-menu-ic { background: var(--vc-ink, #1f1f22); color: #fff; }
+.vc-menu-item.on .vc-menu-state { color: var(--vc-accent-2, #c33); }
+@media (orientation: landscape) and (max-height: 520px) {
+  .vc-menu-card { top: calc(54px + var(--sat)); }
+  .vc-menu-item { padding: 8px 10px; font-size: 14px; }
+  .vc-menu-ic { width: 30px; height: 30px; }
+}

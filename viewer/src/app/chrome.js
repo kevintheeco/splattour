@@ -28,6 +28,7 @@ export class ViewerChrome {
         <a class="vc-btn vc-back" aria-label="뒤로">${icon("back")}</a>
         <div class="vc-title"><div class="vc-room" aria-live="polite"></div><div class="vc-sub">${cond}</div><div class="vc-devtag" hidden></div></div>
         <div class="vc-actions">
+          <button class="vc-btn vc-menu-btn" aria-label="메뉴" aria-expanded="false" hidden>${icon("menu")}</button>
           <button class="vc-btn vc-plan-btn" aria-label="평면도 보이기/숨기기" aria-pressed="true">${icon("map")}</button>
           <button class="vc-btn vc-fs-btn" aria-label="전체 화면">${icon("expand")}</button>
         </div>
@@ -43,6 +44,7 @@ export class ViewerChrome {
       </div>
       <button class="vc-btn vc-gyro" aria-label="휴대폰을 움직여 둘러보기" aria-pressed="false" hidden>${icon("compass")}</button>
       <div class="vc-rotate" hidden><div>${icon("rotate", "vc-rotate-ic")}<b>가로로 돌려 주세요</b><span>휴대폰을 옆으로 눕히면 더 넓게 보여요</span><button class="vc-rotate-ok">세로로 볼게요</button></div></div>
+      <div class="vc-menu" hidden><div class="vc-menu-card" role="menu" aria-label="도구"></div></div>
       <div class="vc-toast"></div>`;
     document.body.appendChild(el);
     this.el = el;
@@ -72,6 +74,44 @@ export class ViewerChrome {
       });
     }
   }
+
+  // ---------- menu (≡) ----------
+  // items: [{ id, icon, label, run(), on?() -> bool, hidden?() -> bool }]. The
+  // viewer passes its own tools (they keep their own logic); tapping outside
+  // or picking an item closes it. Not shown in study mode (see the viewers).
+  setMenu(items) {
+    const btn = this.$(".vc-menu-btn"), wrap = this.$(".vc-menu"), card = this.$(".vc-menu-card");
+    this.menuItems = items || [];
+    btn.hidden = !this.menuItems.length;
+    const render = () => {
+      card.innerHTML = "";
+      for (const it of this.menuItems) {
+        if (it.hidden?.()) continue;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "vc-menu-item";
+        b.setAttribute("role", "menuitem");
+        const on = it.on?.();
+        if (on) b.classList.add("on");
+        b.innerHTML = `<span class="vc-menu-ic">${icon(it.icon)}</span><span class="vc-menu-label"></span>${on !== undefined ? `<span class="vc-menu-state">${on ? "켜짐" : "꺼짐"}</span>` : ""}`;
+        b.querySelector(".vc-menu-label").textContent = it.label;
+        b.addEventListener("click", (e) => { e.stopPropagation(); close(); this.onEvent?.("menu", { item: it.id }); it.run(); });
+        card.appendChild(b);
+      }
+    };
+    const open = () => { render(); wrap.hidden = false; requestAnimationFrame(() => wrap.classList.add("open")); btn.setAttribute("aria-expanded", "true"); btn.classList.add("on"); };
+    const close = () => { wrap.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); btn.classList.remove("on"); setTimeout(() => { if (!wrap.classList.contains("open")) wrap.hidden = true; }, 220); };
+    this.menuOpen = open;
+    this.menuClose = close;
+    if (!this.menuBound) {
+      this.menuBound = true;
+      btn.addEventListener("click", (e) => { e.stopPropagation(); wrap.hidden ? open() : close(); });
+      wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+      wrap.addEventListener("pointerdown", (e) => { if (e.target === wrap) { e.stopPropagation(); } });
+    }
+  }
+
+  fullscreen() { this.$(".vc-fs-btn")?.click(); }
 
   // ---------- plan ----------
   _setupPlan() {

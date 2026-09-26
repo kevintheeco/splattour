@@ -39,6 +39,13 @@ const P = {
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/>',
   upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14.5v4A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-4"/>',
   flask: '<path d="M9.5 3.5h5M10 3.5v5.2L4.8 18a1.6 1.6 0 0 0 1.4 2.5h11.6a1.6 1.6 0 0 0 1.4-2.5L14 8.7V3.5M7.5 14h9"/>',
+  menu: '<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>',
+  photo: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="m6 16.5 4.2-4.7 3 3.2 2-2.2 3 3.7"/><circle cx="9" cy="9.3" r="1.4"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z"/>',
+  sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/>',
+  help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.8M12 16.8h.01"/>',
+  vr: '<path d="M3.5 8h17a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H16l-2-2.5h-4l-2 2.5H3.5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="7.8" cy="12" r="1.6"/><circle cx="16.2" cy="12" r="1.6"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="1.2"/><rect x="13" y="4" width="7" height="7" rx="1.2"/><rect x="4" y="13" width="7" height="7" rx="1.2"/><rect x="13" y="13" width="7" height="7" rx="1.2"/>',
 };
 export const icon = (name, cls = "") =>

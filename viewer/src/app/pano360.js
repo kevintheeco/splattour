@@ -147,8 +147,9 @@ async function main() {
   const hsGroup = new THREE.Group();
   scene.add(hsGroup);
   const labels = $("#labels");
-  const ringGeo = new THREE.RingGeometry(0.21, 0.27, 48).rotateX(-Math.PI / 2);
-  const discGeo = new THREE.CircleGeometry(0.21, 48).rotateX(-Math.PI / 2);
+  // small and quiet: only a hop into another room gets a name label (showSpots)
+  const ringGeo = new THREE.RingGeometry(0.16, 0.2, 48).rotateX(-Math.PI / 2);
+  const discGeo = new THREE.CircleGeometry(0.16, 48).rotateX(-Math.PI / 2);
   let spots = [];
   function hotspotDir(from, to) {
     const o = from.hotspots?.find((h) => h.to === to.id);
@@ -165,8 +166,8 @@ async function main() {
       const { yaw, d } = hotspotDir(node, to);
       const g = new THREE.Group();
       g.position.set(-Math.sin(yaw) * d, -EYE, -Math.cos(yaw) * d);
-      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false }));
-      const disc = new THREE.Mesh(discGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthTest: false }));
+      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthTest: false }));
+      const disc = new THREE.Mesh(discGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthTest: false }));
       ring.renderOrder = disc.renderOrder = 2;
       g.add(disc, ring);
       hsGroup.add(g);
@@ -192,7 +193,7 @@ async function main() {
       s.t = Math.min(1, s.t + dt * 3);
       const k = smoother(s.t) * (s.hover ? 1.18 : 1);
       s.g.scale.setScalar(Math.max(0.001, k));
-      s.disc.material.opacity = s.hover ? 0.5 : 0.22;
+      s.disc.material.opacity = s.hover ? 0.45 : 0.16;
       _v.copy(s.g.position).setY(s.g.position.y + 0.42).project(camera);
       s.screen = { x: (_v.x * 0.5 + 0.5) * w, y: (-_v.y * 0.5 + 0.5) * h, front: _v.z < 1 };
       _v.copy(s.g.position).project(camera);
@@ -440,6 +441,15 @@ async function main() {
   if (params.get("onboarding") === "0" || tasks.length) hint.classList.add("gone");
   document.body.appendChild(hint);
   function hideHint() { hint.classList.add("gone"); }
+  // ≡ menu, the subset that applies to the 360° viewer (the same look as the
+  // 3DGS one); not in the study, as there.
+  if (!STUDY) {
+    chrome.setMenu([
+      { id: "help", icon: "help", label: "도움말 · 조작법", run: () => { hint.classList.remove("gone"); setTimeout(hideHint, 4500); } },
+      { id: "fullscreen", icon: "expand", label: "전체 화면", run: () => chrome.fullscreen() },
+      { id: "sound", icon: "sound", label: "소리", run: () => { doorSet.sound.on = !doorSet.sound.on; chrome.toast(doorSet.sound.on ? "문 소리 켜짐" : "문 소리 꺼짐"); }, on: () => !!doorSet?.sound?.on, hidden: () => !doorSet },
+    ]);
+  }
   look.addEventListener("interact", () => setTimeout(hideHint, 1500));
 
   // ---------- loop ----------

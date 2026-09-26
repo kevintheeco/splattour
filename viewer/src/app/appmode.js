@@ -25,36 +25,6 @@ export async function prepare({ params, tour }) {
 class AppMode {
   constructor(o) { Object.assign(this, o); }
 
-  // 원본 / AI 보정 — the same space trained from the original frames or from
-  // AI-upscaled ones (listing.variants: [{scene, label}]). Demo only: hidden in
-  // study mode so both conditions keep one fixed picture. Switching reloads
-  // with the other scene at the current pose (?pose=).
-  variantSwitch(variants, chrome) {
-    const cur = this.params.get("scene");
-    const box = document.createElement("div");
-    box.className = "vc-variant";
-    box.setAttribute("role", "group");
-    box.setAttribute("aria-label", "화질");
-    for (const v of variants) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = v.label;
-      b.setAttribute("aria-pressed", String(v.scene === cur));
-      if (v.scene === cur) b.classList.add("on");
-      b.addEventListener("click", () => {
-        if (v.scene === cur) return;
-        const u = new URL(location.href);
-        u.searchParams.set("scene", v.scene);
-        const p = this.rig.position;
-        u.searchParams.set("pose", [p.x, p.y, p.z, this.look.yaw, this.look.pitch].map((x) => x.toFixed(3)).join(","));
-        location.replace(u.href);
-      });
-      box.appendChild(b);
-    }
-    const actions = chrome.el.querySelector(".vc-actions");
-    actions ? actions.prepend(box) : chrome.el.appendChild(box);
-  }
-
   // Same exploration range as the 360° condition: walkable cells farther than
   // range.radius from every capture point are closed (?range=0 turns this off).
   limitWalk(walkMap) {
@@ -96,7 +66,6 @@ class AppMode {
       onBack: () => (STUDY ? confirm("실험을 그만두고 나갈까요?") : true),
     }));
     if (!nav) chrome.dev("이 공간의 촬영 지점(nav.json)이 없어 방 이름·평면도·탐색 범위를 맞출 수 없어요");
-    if (!STUDY && Array.isArray(listing?.variants) && listing.variants.length > 1) this.variantSwitch(listing.variants, chrome);
 
     // study log: the tour's study.js (pose, moves, zoom) + room and task events
     let study = null;
@@ -142,6 +111,22 @@ class AppMode {
     };
     // same start as the 360° tour
     if (nav && !params.get("node")) await jump(nav.start.id);
+
+    // ≡ menu: the tour's own tools (their code stays in main.js; these just
+    // press them). Not in the study, so both conditions show the same screen.
+    if (!STUDY) {
+      const tool = (act) => document.querySelector(`#tools [data-act="${act}"]`);
+      const isOn = (act) => !!tool(act)?.classList.contains("on");
+      chrome.setMenu([
+        { id: "photos", icon: "photo", label: "원본 사진 보기", run: () => tool("photos")?.click(), on: () => isOn("photos"), hidden: () => !tool("photos") || tool("photos").hidden },
+        { id: "cinema", icon: "play", label: "자동 둘러보기", run: () => window.splattour?.toggleCinema(), on: () => !!window.splattour?.cinema?.active, hidden: () => !window.splattour?.cinema },
+        { id: "light", icon: "bulb", label: "조명", run: () => tool("light")?.click(), on: () => isOn("light") },
+        { id: "music", icon: "sound", label: "소리", run: () => tool("music")?.click(), on: () => isOn("music") },
+        { id: "help", icon: "help", label: "도움말 · 조작법", run: () => tool("help")?.click() },
+        { id: "fullscreen", icon: "expand", label: "전체 화면", run: () => chrome.fullscreen() },
+        { id: "vr", icon: "vr", label: "VR로 보기", run: () => tool("vr")?.click(), hidden: () => !tool("vr") || tool("vr").hidden },
+      ]);
+    }
 
     // touch phones walk with a joystick (bottom-left), like W A S D on a keyboard;
     // the plan sits bottom-right in both conditions (same place in the 360° viewer)

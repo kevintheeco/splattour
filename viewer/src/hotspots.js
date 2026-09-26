@@ -92,7 +92,9 @@ export class Hotspots {
   // Rebuild markers for the neighbours of `node`.
   show(node) {
     this.clear();
-    if (!node) return;
+    // app mode (3DGS condition): no floor markers or labels; you move by
+    // joystick, double-tap and drag, the room name is in the top bar
+    if (!node || this.hidden) return;
     for (const n of this.tour.neighbors(node)) {
       const g = new THREE.Group();
       const ring = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flatMaterial(this.ringTex));

@@ -262,6 +262,7 @@ async function main() {
   const vignetteOn = params.get("vignette") !== "0";
   const vignette = $("#vignette");
   const hotspots = new Hotspots({ scene, camera, rig, tour, labelLayer: $("#labels") });
+  hotspots.hidden = !!app; // 3DGS condition in the app: no floor markers (see hotspots.show)
   // Source photos: the button appears only when the scene ships them.
   const photosBtn = document.querySelector('[data-act="photos"]');
   const photos = new Photos({ tour, nav, look, rig, toast });
@@ -791,7 +792,8 @@ async function main() {
   }
   // Cinematic auto-camera along the walked path (cinema.js): tour page only,
   // never in the study or the listing app. ?cinema=1 starts it, C toggles.
-  const cinema = !params.has("study") && !app ? new Cinema({ tour, rig, look, baseUrl }) : null;
+  // (in the app too, from the ≡ menu, but never in the study)
+  const cinema = !params.has("study") ? new Cinema({ tour, rig, look, baseUrl }) : null;
   if (cinema) {
     const startCinema = async () => {
       if (mode !== "splat") return;
@@ -1150,7 +1152,8 @@ async function main() {
   });
 
   // Debug / automation hooks (used by the evaluation scripts).
-  window.splattour = { walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat), progress: () => (streaming ? { full: streaming.full && { ...streaming.full }, shown: streaming.shown || 0, pill: $("#streamPill")?.textContent || "", pillOn: !!$("#streamPill")?.classList.contains("show") } : null) };
+  const toggleCinema = () => { if (!cinema) return; if (cinema.active) cinema.stop(); else cinema.start().then((ok) => ok && toast("자동 둘러보기 · 화면을 누르면 멈춰요", 3000)); };
+  window.splattour = { toggleCinema, walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat), progress: () => (streaming ? { full: streaming.full && { ...streaming.full }, shown: streaming.shown || 0, pill: $("#streamPill")?.textContent || "", pillOn: !!$("#streamPill")?.classList.contains("show") } : null) };
 }
 
 main().catch((err) => {
