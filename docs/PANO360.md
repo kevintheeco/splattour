@@ -247,3 +247,9 @@ clip 번호는 파일 이름순: 0 = `_0007`(앞마당 → 끝에 어두운 실�
 - 고침: 0010 프레임을 뺀 모델(`data/pano360/wolhajeong360-hq/sparse_tour`, 9,372장)의 수평 사진(pano_camera0~7, 0007·0008)만으로 다시 정렬·시점 생성 → 시점 15개(앞마당 9, 거실 쪽 6), 눈높이 1.45 m, 바닥 y=0(바닥 RANSAC, 카메라 높이 중앙값 1.60 m), 시작 = n1(앞마당, 집을 바라봄). `capture_path.json`, `lod/`(62조각 187 MB, occupancy, plan, 썸네일 15장) 다시 굽고 `lod` 항목 추가. 이전 tour.json은 `data/pano360/wolhajeong360-hq/tour.before-fix.json`.
 - 사진: 학습 사진은 서버와 함께 사라져서 원본 영상(R2, 서명 URL)에서 파노라마 4장마다 한 장씩 수평 4방향(0/90/180/-90°)을 ffmpeg v360으로 다시 뽑음(학습 사진과 같은 투영, 대조 확인). 촬영자가 8% 넘게 가린 것은 빼서 448장. `photos.py`가 rig 사진 이름(`pano_camera<i>/<frame>`)을 파일 이름으로 쓸 때 서로 덮어쓰던 버그를 고침.
 - 실제 사이트 확인(헤드리스 Chrome, GPU): 데스크톱 1280×720, 휴대폰 390×844에서 시작점 + 시점 4·6·12(거실)·13(거실). `docs/checks/wolhajeong360-hq/live/`.
+
+### 사랑방 = 별도 모델 `wolhajeong360-sarang` (pod 3fbi0pntzl24xg, L40S $1.09/h, 52분, 약 $0.98)
+- 큰 모델에 0010을 다시 붙이는 대신(0009 다리 + 전체 재학습은 약 $3.5, 위험) **0010만으로 작은 모델**을 만듦(앱은 방마다 따로 된 3DGS와 문 전환을 이미 지원, 87dced3). 명령: `pano360 cloud --from-inbox 20260925-ccc8575c1d1f --name wolhajeong360-sarang --frames 220 --steps 30000 --cap 2000000 --train-flags sh_degree_interval=2000 --dense-prior wolhajeong360 --exclude 0007 --exclude 0008 --exclude 0009(파일 이름) --mask-refine --hours 2`.
+- 106 파노라마 전부 한 모델(0.809 px), 시간 상한 때문에 25,653 스텝, 200만: 시험 **PSNR 28.66 / SSIM 0.965 / LPIPS 0.098**. 360 지점 17개(채우기 완료, 작은 방이라 이번엔 돌았음) R2 `cloud/pano360/wolhajeong360-sarang/nav_filled`.
+- 투어: 수평 사진으로 시점 6개, 눈높이 1.45, LoD 38조각 118 MB, 사진 103장. 링크 전용 `/tour.html?scene=wolhajeong360-sarang&from=cloud`, 실제 사이트 데스크톱·휴대폰 확인 `docs/checks/wolhajeong360-sarang/live/`.
+- 남은 일: 큰 모델 ↔ 사랑방 모델 사이 문(좌표 맞춤)은 아직 없음. 밤사이 클라우드 합계 약 $4.80(잔액 $29.10 → $24.30).
