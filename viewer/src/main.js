@@ -962,17 +962,24 @@ async function main() {
     const fwd = (held.has("KeyW") || held.has("ArrowUp") ? 1 : 0) - (held.has("KeyS") || held.has("ArrowDown") ? 1 : 0);
     const side = (held.has("KeyD") ? 1 : 0) - (held.has("KeyA") ? 1 : 0);
     const want = new THREE.Vector3();
+    // touch phones (app mode): the joystick gives a direction and a push 0..1
+    const joy = app?.joystick?.value();
+    const joyOn = !!joy && (joy.x !== 0 || joy.y !== 0);
     if (fwd || side) {
       const sy = Math.sin(look.yaw), cy = Math.cos(look.yaw);
       want.set(-sy * fwd + cy * side, 0, -cy * fwd - sy * side).normalize();
       want.multiplyScalar(nav.walkSpeed * (held.has("ShiftLeft") || held.has("ShiftRight") ? 1.9 : 1));
+    } else if (joyOn) {
+      const sy = Math.sin(look.yaw), cy = Math.cos(look.yaw);
+      // push up = forward, sideways = step sideways; speed up to the walking pace
+      want.set(-sy * joy.y + cy * joy.x, 0, -cy * joy.y - sy * joy.x).multiplyScalar(nav.walkSpeed);
     }
     // Limited acceleration (1.6 m/s², 2.4 to stop): a calm start, no lurch.
     const dv = want.clone().sub(keyVel);
     const lim = (want.lengthSq() >= keyVel.lengthSq() ? 1.6 : 2.4) * dt;
     if (dv.length() > lim) dv.setLength(lim);
     keyVel.add(dv);
-    if (keyVel.length() < 0.02 && !(fwd || side)) {
+    if (keyVel.length() < 0.02 && !(fwd || side || joyOn)) {
       keyVel.set(0, 0, 0);
       if (keyWalking) {
         keyWalking = false;
@@ -992,6 +999,7 @@ async function main() {
     }
     const g = walkMap.level(floorY());
     const p = rig.position;
+    const px0 = p.x, pz0 = p.z;
     const nx = p.x + keyVel.x * dt, nz = p.z + keyVel.z * dt;
     // slide along obstacles: try the full step, then each axis alone
     // a door whose other side is still loading stops the step (app/portals.js)
@@ -1001,6 +1009,7 @@ async function main() {
     else if (walkMap.canStep(g, p.x, p.z, nx, p.z)) { p.x = nx; keyVel.z = 0; }
     else if (walkMap.canStep(g, p.x, p.z, p.x, nz)) { p.z = nz; keyVel.x = 0; }
     else keyVel.set(0, 0, 0);
+    app?.joystick?.addDistance(Math.hypot(p.x - px0, p.z - pz0));
     const hk = walkMap.heightAt(g, p.x, p.z);
     p.y += ((Number.isFinite(hk) ? hk : g.fy) + tour.eyeHeight - p.y) * (1 - Math.exp(-dt * 6));
   }

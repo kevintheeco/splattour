@@ -89,7 +89,7 @@ html.pseudo-fs #app { height: 100dvh; }
 
 /* ---------- plan: mini card ---------- */
 .vc-plan {
-  position: absolute; left: calc(12px + var(--sal)); bottom: calc(14px + var(--sab)); width: var(--plan); height: calc(var(--plan) * 0.78);
+  position: absolute; right: calc(12px + var(--sar)); bottom: calc(14px + var(--sab)); width: var(--plan); height: calc(var(--plan) * 0.78);
   padding: 0; border: 0; border-radius: 18px; background: var(--vc-paper); box-shadow: var(--vc-shadow); overflow: hidden; cursor: zoom-in;
   outline: 1px solid rgba(255, 255, 255, 0.6); outline-offset: -1px;
   transition: transform 0.45s var(--vc-ease), opacity 0.3s var(--vc-ease);
@@ -120,7 +120,20 @@ html.pseudo-fs #app { height: 100dvh; }
 .vc-sheet-foot { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px 14px; font-size: 12px; color: var(--vc-muted); font-weight: 550; }
 .vc-me-key { width: 12px; height: 12px; border-radius: 50%; background: var(--vc-blue); box-shadow: 0 0 0 2.5px #fff, 0 0 0 3.5px rgba(47, 124, 246, 0.3); }
 
-.vc-gyro { position: absolute; right: calc(12px + var(--sar)); bottom: calc(14px + var(--sab)); }
+/* above the plan (bottom-right in both conditions; the 3DGS joystick is bottom-left) */
+.vc-gyro { position: absolute; right: calc(12px + var(--sar)); bottom: calc(26px + var(--sab) + var(--plan) * 0.78); }
+
+/* walking joystick, touch phones, 3DGS condition (app/joystick.js) */
+.vc-joy {
+  position: fixed; left: calc(22px + var(--sal, 0px)); bottom: calc(26px + var(--sab, 0px)); width: 104px; height: 104px; border-radius: 50%; z-index: 3;
+  background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.45); box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); touch-action: none; user-select: none; -webkit-user-select: none;
+  display: grid; place-items: center; opacity: 0; transition: opacity 0.6s var(--vc-ease, ease), background 0.2s;
+}
+.vc-joy.on { opacity: 1; }
+.vc-joy.held { background: rgba(255, 255, 255, 0.28); }
+.vc-joy-knob { width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.82); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22); pointer-events: none; transition: transform 0.18s var(--vc-ease, ease); }
+.vc-joy.held .vc-joy-knob { transition: none; }
 
 .vc-toast {
   position: absolute; left: 50%; bottom: calc(76px + var(--sab)); transform: translate(-50%, 8px); opacity: 0; pointer-events: none; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis;
