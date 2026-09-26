@@ -10,10 +10,13 @@
 //        room labels: --labels, else data/pano360/<scene>.labels*.json, else the same for <scene> without "-hq"
 //          ({segments: [{clip, from, to, room}]}: seconds of each source clip; an image name "c<clip>_<frame>" is frame / fps)
 //        scenes/<scene>/lod/occupancy.bin     walls, to link added points only where you can walk straight
-// Keeps  from the old nav.json: status (360 readiness), transition, range, doorFx, doors (only if their rooms still exist)
+// Keeps  from the old nav.json: status (360 readiness), transition, range, doorFx, doors (only if their rooms still exist),
+//        and rooms captured as their own model (rooms[].scene + sceneTransform + floorY, e.g. 사랑방): their
+//        capture points come from that scene's tour.json, placed in this frame; a region box is made if missing
 // Writes viewer/public/spaces/<space>/nav.json   (the old one -> nav.before-<scene>.json the first time)
 import fs from "node:fs";
 import path from "node:path";
+import * as THREE from "three";
 
 const argv = process.argv.slice(2);
 const flag = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv.splice(i, 2)[1] : d; };
@@ -188,8 +191,49 @@ for (const n of [...added]) {
 }
 console.log("floors:", nodes.map((n, i) => `${n.id}=${n.floorY}${raw[i] === null ? "?" : ""}`).join(" "));
 
+// ---- rooms captured as their own 3DGS model (portal rooms), placed by their sceneTransform
+const modelRooms = (oldNav.rooms || []).filter((r) => r.scene && r.scene !== scene && r.sceneTransform);
+for (const r of modelRooms) {
+  const t2 = read(path.join(root, "scenes", r.scene, "tour.json"));
+  const xf = r.sceneTransform;
+  const q = xf.quaternion ? new THREE.Quaternion().fromArray(xf.quaternion).normalize() : new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ((xf.yawDeg || 0) * Math.PI) / 180);
+  const M = new THREE.Matrix4().compose(new THREE.Vector3().fromArray(xf.position), q, new THREE.Vector3(xf.scale, xf.scale, xf.scale));
+  const yaw = new THREE.Euler().setFromQuaternion(q, "YXZ").y;
+  const pre = r.id.slice(0, 1);
+  const ids = new Map();
+  for (const n of t2.nodes) {
+    const p = new THREE.Vector3().fromArray(n.position).applyMatrix4(M);
+    const id = `${pre}${n.id.replace(/^n/, "")}`;
+    ids.set(n.id, id);
+    const node = { id, room: r.id, position: [r3(p.x), r3(r.floorY + eye), r3(p.z)], imageYawDeg: +((((n.yaw ?? 0) + yaw) * 180) / Math.PI).toFixed(1), neighbors: [], from: `${r.scene}:${n.image || n.id}`, floorY: r.floorY };
+    nodes.push(node); byId.set(id, node);
+  }
+  for (const [a, b] of t2.edges || []) link(byId.get(ids.get(a)), byId.get(ids.get(b)));
+  if (!roomIds.has(r.name)) roomIds.set(r.name, r.id);
+  // through its door(s): join the room point nearest the door to the nearest point outside it
+  for (const d of (oldNav.doors || []).filter((dd) => dd.toRoom === r.id || dd.fromRoom === r.id)) {
+    const dp = { position: d.position };
+    const inside = nodes.filter((n) => n.room === r.id).sort((a, b) => dist(a, dp) - dist(b, dp))[0];
+    const outside = nodes.filter((n) => n.room !== r.id && !modelRooms.some((m) => m.id === n.room)).sort((a, b) => dist(a, dp) - dist(b, dp))[0];
+    if (inside && outside) { link(inside, outside); console.log(`${r.name}: ${inside.id} <-> ${outside.id} through ${d.id}`); }
+  }
+  // region: where this model is drawn instead of the space's (a box from its door plane over its capture points)
+  if (!r.region) {
+    const d = (oldNav.doors || []).find((dd) => dd.toRoom === r.id);
+    const inRoom = nodes.filter((n) => n.room === r.id);
+    const yawD = d ? (d.yaw * Math.PI) / 180 : 0;
+    const nx = -Math.sin(yawD), nz = -Math.cos(yawD), tx = Math.cos(yawD), tz = -Math.sin(yawD);
+    const o = d ? d.position : inRoom[0].position;
+    const loc = inRoom.map((n) => [(n.position[0] - o[0]) * tx + (n.position[2] - o[2]) * tz, (n.position[0] - o[0]) * nx + (n.position[2] - o[2]) * nz]);
+    const l0 = Math.min(...loc.map((v) => v[0])) - 1.3, l1 = Math.max(...loc.map((v) => v[0])) + 1.3;
+    const d0 = 0.04, d1 = Math.max(...loc.map((v) => v[1])) + 1.2;
+    const cl = (l0 + l1) / 2, cd = (d0 + d1) / 2;
+    r.region = { center: [r3(o[0] + tx * cl + nx * cd), r3(r.floorY + 1.2), r3(o[2] + tz * cl + nz * cd)], size: [r3(l1 - l0), 3.0, r3(d1 - d0)], yaw: d ? d.yaw : 0, note: "made by space-from-scene.mjs: from the door plane over the room's capture points (+1.2-1.3 m)" };
+  }
+}
+
 // ---- rooms, doors, nav
-const rooms = [...roomIds].map(([name, id]) => ({ id, name })).filter((r) => nodes.some((n) => n.room === r.id));
+const rooms = [...roomIds].map(([name, id]) => ({ id, name, ...(modelRooms.find((m) => m.id === id) ? (({ id: _i, name: _n, ...rest }) => rest)(modelRooms.find((m) => m.id === id)) : {}) })).filter((r) => nodes.some((n) => n.room === r.id));
 const keepDoors = (oldNav.doors || []).filter((d) => rooms.some((r) => r.id === d.fromRoom) && rooms.some((r) => r.id === d.toRoom));
 const nav = {
   version: 1,

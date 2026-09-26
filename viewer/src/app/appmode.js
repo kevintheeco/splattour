@@ -196,6 +196,7 @@ class AppMode {
       const { Portals } = await import("./portals.js");
       this.portals = new Portals({ nav, doors, primary: { name: sceneName, splat, occ, tour }, loadScene, walkMap, log });
     }
+    this.log = log;
     log("doors", { n: doors.length, ids: doors.map((d) => d.id), sound: soundOn, duration: fx.duration, portals: this.portals?.doors.map((d) => d.id) || [] });
     window.__doors = { set: this.doorSet, portals: this.portals, app: this };
   }
@@ -248,6 +249,107 @@ class AppMode {
       if (hold) this.chrome.toast("문 너머 공간을 불러오는 중…", 2500);
     }
     this.doorSet.update(dt, { eye, camYaw: this.look.yaw, vel: this.vel, ahead, camera: this.view.camera });
+  }
+
+  // ---------- going through a door into a room captured as its own model ----------
+  // Double-tap on a portal door (or into the room behind it): walk up to the
+  // door, it opens, and a short fade carries you straight through, facing the
+  // same way, onto the room's floor; it closes behind you. (A walkable path
+  // through reconstructed doorways and furniture is not reliable yet, so the
+  // step through is this door transit; the room itself sits at its true place.)
+  portalTap(origin, dir, hitDist, hitP) {
+    if (!this.portals?.doors.length || this.transiting) return false;
+    const eye = this.rig.position;
+    for (const d of this.portals.doors) {
+      // the tap ray through the doorway rectangle
+      const denom = dir.x * d.n[0] + dir.z * d.n[1];
+      let hit = false;
+      if (Math.abs(denom) > 1e-3) {
+        const k = ((d.cx - origin.x) * d.n[0] + (d.cz - origin.z) * d.n[1]) / denom;
+        if (k > 0 && k < Math.min(14, hitDist + 0.6)) {
+          const px = origin.x + dir.x * k, py = origin.y + dir.y * k, pz = origin.z + dir.z * k;
+          const { lat } = this.D.doorLocal(d, px, pz);
+          hit = Math.abs(lat) <= d.halfW + 0.15 && py >= d.cy - 0.2 && py <= d.cy + d.height + 0.2;
+        }
+      }
+      // or a tap into the room on the other side of it
+      const room = this.nav.rooms.get(d.toRoom);
+      const meIn = this.portals.inRegion(room?.scene, eye);
+      const tapIn = hitP && this.portals.inRegion(room?.scene, hitP);
+      if (hit || (hitP && meIn !== tapIn && Math.hypot(hitP.x - d.cx, hitP.z - d.cz) < 4)) {
+        this.transitDoor(d, meIn ? -1 : 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async transitDoor(d, dir) {
+    const S = window.splattour;
+    if (!S || !this.portals.ready(d)) { this.chrome.toast("문 너머 공간을 불러오는 중…", 2000); return; }
+    this.transiting = true;
+    try {
+      const nav = this.nav3, T = S.THREE, eyeH = S.tour.eyeHeight;
+      const g = S.walkMap.level(0);
+      const floorAt = (x, z, fb) => { const h = S.walkMap.heightAt(g, x, z); return Number.isFinite(h) ? h : fb; };
+      const fromRoom = this.nav.rooms.get(dir > 0 ? d.fromRoom : d.toRoom), toRoom = this.nav.rooms.get(dir > 0 ? d.toRoom : d.fromRoom);
+      const floorFrom = fromRoom?.floorY ?? 0, floorTo = toRoom?.floorY ?? 0;
+      const yaw = dir > 0 ? d.yawRad : d.yawRad + Math.PI; // facing through the door
+      // 1. walk up to the door (0.9 m in front of it) unless already there
+      const ax = d.cx - d.n[0] * dir * 0.9, az = d.cz - d.n[1] * dir * 0.9;
+      if (Math.hypot(this.rig.position.x - ax, this.rig.position.z - az) > 0.4) {
+        const target = new T.Vector3(ax, floorAt(ax, az, floorFrom) + eyeH, az);
+        if (nav.goToPoint(target, { yaw })) {
+          const t0 = performance.now();
+          while (nav.busy && performance.now() - t0 < 12000) await new Promise((r) => setTimeout(r, 60));
+        }
+      }
+      // 2. face the door (a calm turn, no snap), and it opens (the same animation, timing and sound as everywhere)
+      await this.turnTo(yaw, -0.05);
+      await this.doorSet.openFor(d.id, "tap");
+      // 3. through it: a short fade, the same heading, onto the other floor
+      const fade = document.getElementById("loader");
+      fade.classList.remove("done");
+      fade.style.transition = "opacity .22s";
+      fade.firstElementChild.style.visibility = "hidden";
+      await new Promise((r) => setTimeout(r, 240));
+      const bx = d.cx + d.n[0] * dir * 1.25, bz = d.cz + d.n[1] * dir * 1.25;
+      if (nav.moving) nav.stop();
+      nav.current = null;
+      this.rig.position.set(bx, floorAt(bx, bz, floorTo) + eyeH, bz);
+      this.look.set(yaw, -0.05);
+      this.log?.("door_transit", { door: d.id, from: fromRoom?.id, to: toRoom?.id });
+      await new Promise((r) => setTimeout(r, 80));
+      fade.classList.add("done");
+      setTimeout(() => { fade.style.transition = ""; fade.firstElementChild.style.visibility = ""; }, 350);
+      // then turn calmly toward the middle of the room, as you would stepping in
+      const pts = this.nav.nodes.filter((n) => n.room === toRoom?.id);
+      if (pts.length) {
+        const mx = pts.reduce((a, n) => a + n.position[0], 0) / pts.length, mz = pts.reduce((a, n) => a + n.position[2], 0) / pts.length;
+        const want = Math.atan2(-(mx - bx), -(mz - bz));
+        if (Math.abs(Math.atan2(Math.sin(want - yaw), Math.cos(want - yaw))) > 0.35) await this.turnTo(want, -0.05);
+      }
+    } finally {
+      this.doorSet.release(d.id); // closes behind you
+      this.transiting = false;
+    }
+  }
+
+  // turn the view to yaw/pitch smoothly (ease in-out, about 70°/s at most, like walking turns)
+  turnTo(yaw, pitch = this.look.pitch) {
+    const y0 = this.look.yaw, p0 = this.look.pitch;
+    const dy = Math.atan2(Math.sin(yaw - y0), Math.cos(yaw - y0)), dp = pitch - p0;
+    // ease in-out peaks at pi/2 x the mean rate: mean 44°/s -> peak about 70°/s (the walker's turn cap)
+    const dur = 300 + (Math.max(Math.abs(dy), Math.abs(dp)) / ((44 * Math.PI) / 180)) * 1000;
+    const t0 = performance.now();
+    return new Promise((res) => {
+      const step = () => {
+        const u = Math.min(1, (performance.now() - t0) / dur), e = 0.5 - 0.5 * Math.cos(Math.PI * u);
+        if (!this.look.dragging) { this.look.yaw = y0 + dy * e; this.look.pitch = p0 + dp * e; }
+        u < 1 ? requestAnimationFrame(step) : res();
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   // keyboard walking: no stepping through a door whose other side is not loaded yet

@@ -46,7 +46,8 @@ export class Portals {
     this.models.set(name, m);
     const t0 = performance.now();
     this._evict(name);
-    m.promise = this.o.loadScene(name).then((r) => {
+    const room = [...this.o.nav.rooms.values()].find((r) => r.scene === name) || null;
+    m.promise = this.o.loadScene(name, room).then((r) => {
       Object.assign(m, r, { ready: true, promise: null });
       m.splat.opacity = 0;
       this._mergeWalls(m);
@@ -93,6 +94,7 @@ export class Portals {
   _mergeWalls(m) {
     const a = this.o.primary.occ, b = m.occ;
     if (!a || !b || a === b) return;
+    const region = this.regionOf.get(m.name);
     const v = a.voxel;
     const box = a.box.clone().union(b.box);
     const size = box.getSize(new THREE.Vector3());
@@ -103,8 +105,24 @@ export class Portals {
       for (let z = 0; z < nz; z++)
         for (let x = 0; x < nx; x++) {
           p.set(box.min.x + (x + 0.5) * v, box.min.y + (y + 0.5) * v, box.min.z + (z + 0.5) * v);
-          if (a.occupied(p) || b.occupied(p)) solid[(y * nz + z) * nx + x] = 1;
+          // with a region, each model's walls count only on its own side (a room model
+          // also holds blurry bits of what it saw through its windows)
+          if (region ? (this.inRegion(m.name, p) ? b.occupied(p) : a.occupied(p)) : a.occupied(p) || b.occupied(p)) solid[(y * nz + z) * nx + x] = 1;
         }
+    // the doorways of portal doors are open (each model captured its door closed)
+    for (const d of this.doors) {
+      const W = d.halfW - 0.03, y0 = d.cy + 0.03, y1 = d.cy + d.height;
+      for (let y = 0; y < ny; y++) {
+        const wy = box.min.y + (y + 0.5) * v;
+        if (wy < y0 || wy > y1) continue;
+        for (let z = 0; z < nz; z++)
+          for (let x = 0; x < nx; x++) {
+            const wx = box.min.x + (x + 0.5) * v, wz = box.min.z + (z + 0.5) * v;
+            const { nd, lat } = doorLocal(d, wx, wz);
+            if (Math.abs(lat) <= W && Math.abs(nd) <= 0.35) solid[(y * nz + z) * nx + x] = 0;
+          }
+      }
+    }
     // in place: every user of the grid (walking, clicks, lamps) keeps its reference
     Object.assign(a, { box, nx, ny, nz, solid });
     this.o.walkMap?.levels.clear();
@@ -128,6 +146,13 @@ export class Portals {
     for (const [a, set] of t2.adj) for (const b of set) {
       const A = idMap.get(a), B = idMap.get(b);
       if (A && B && A !== B) { tour.adj.get(A)?.add(B); tour.adj.get(B)?.add(A); }
+    }
+    // through each door to this model: its capture point nearest the door <-> the nearest one outside
+    const mine = new Set(idMap.values());
+    for (const d of this.doors) {
+      const near = (ids) => [...ids].map((id) => tour.byId.get(id)).filter(Boolean).sort((p, q) => Math.hypot(p.position.x - d.cx, p.position.z - d.cz) - Math.hypot(q.position.x - d.cx, q.position.z - d.cz))[0];
+      const inside = near(mine), outside = near(tour.nodes.filter((n) => !mine.has(n.id)).map((n) => n.id));
+      if (inside && outside) { tour.adj.get(inside.id).add(outside.id); tour.adj.get(outside.id).add(inside.id); }
     }
   }
 

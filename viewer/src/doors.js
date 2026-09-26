@@ -19,7 +19,7 @@
 //               "width", "height",      m (the opening)
 //               "style": "hanok-double" | "hanok-single" | "sliding" | "plain",
 //               "open": "swing-in" | "swing-out" | "slide"   (in = into toRoom)
-//               optional: "texture" (door photo, front = seen from fromRoom), "textureBack",
+//               optional: "texture" (door photo, front = seen from fromRoom), "textureBack" (seen from toRoom, as photographed),
 //               "pattern" ("ttisal" | "planks" | "panelled"), "leaves", "hinge" ("left"|"right"),
 //               "openAngle" (deg, 92), "light" (fixed brightness instead of auto), "tint" "#rrggbb",
 //               "visibleFrom" ([node ids] shown in the 360° view), "draft": true }]
@@ -564,7 +564,10 @@ export class DoorSet {
       it.mats.push(front, back);
     }
     if (d.textureUrl) loadPhoto(d.textureUrl, (t) => { for (const L of it.leaves) { L.front.map = t; if (!d.textureBackUrl) L.back.map = t; L.front.needsUpdate = L.back.needsUpdate = true; } });
-    if (d.textureBackUrl) loadPhoto(d.textureBackUrl, (t) => { for (const L of it.leaves) { L.back.map = t; L.back.needsUpdate = true; } });
+    // a photo of the back as seen from the room: mirror it onto the back faces' coordinates
+    if (d.textureBackUrl) loadPhoto(d.textureBackUrl, (t) => { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; for (const L of it.leaves) { L.back.map = t; L.back.needsUpdate = true; } });
+    // a photo already carries the scene's own light: no brightness matching
+    if (d.textureUrl && d.light == null) it.light = 1, (it.fixedLight = true);
     this._pose(it);
     return it;
   }
@@ -683,7 +686,7 @@ export class DoorSet {
   // gentle falloff when a leaf turns edge-on to the eye.
   _shade(it, eye, camera) {
     const d = it.d;
-    if (d.light == null && this.sample && this.time - it.sampled > 0.5 && it.p < 0.05) {
+    if (d.light == null && !it.fixedLight && this.sample && this.time - it.sampled > 0.5 && it.p < 0.05) {
       const dist = Math.hypot(eye.x - d.cx, eye.z - d.cz);
       if (dist < 9) {
         it.sampled = this.time;

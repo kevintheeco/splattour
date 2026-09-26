@@ -4,7 +4,7 @@
  "scene": "wolhajeong360-hq",
  "generated": {
   "by": "viewer/scripts/space-from-scene.mjs",
-  "at": "2026-09-26T02:12:36.969Z",
+  "at": "2026-09-26T03:05:42.002Z",
   "from": "scenes/wolhajeong360-hq/tour.json + capture_path.json",
   "labels": "data/pano360/wolhajeong360.labels.draft.json",
   "addedPoints": 2
@@ -36,6 +36,41 @@
   {
    "id": "dark",
    "name": "어두운 실내"
+  },
+  {
+   "id": "sarang",
+   "name": "별채 사랑방",
+   "scene": "wolhajeong360-sarang",
+   "floorY": 0.69,
+   "sceneTransform": {
+    "scale": 0.62874,
+    "quaternion": [
+     0.047877,
+     0.20195,
+     -0.134101,
+     0.96899
+    ],
+    "position": [
+     -0.1002,
+     0.6941,
+     -2.5207
+    ],
+    "about": "wolhajeong360-sarang 모델 좌표 -> 이 공간(wolhajeong360-hq) 좌표. 실제 사랑방 문을 앞마당 쪽·방 안쪽에서 잰 문틀(폭·높이 1% 안, 모서리 5 cm 안)로 풀었다. 사랑방 모델은 약 16° 기울고 1.55배 크게 복원되어 있었다(scenes 파일은 그대로 두고 여기서 바로잡는다)."
+   },
+   "region": {
+    "center": [
+     -0.1027,
+     1.89,
+     -3.4448
+    ],
+    "size": [
+     4.5471,
+     3,
+     3.2397
+    ],
+    "yaw": -86.4,
+    "note": "made by space-from-scene.mjs: from the door plane over the room's capture points (+1.2-1.3 m)"
+   }
   }
  ],
  "nodes": [
@@ -84,7 +119,8 @@
    "neighbors": [
     "n1",
     "n3",
-    "n7"
+    "n7",
+    "s5"
    ],
    "floorY": 0,
    "source": "pano_camera0/c00_01283.jpg"
@@ -318,11 +354,131 @@
    "floorY": 0.7,
    "source": "pano_camera0/c00_05359.jpg",
    "added": true
+  },
+  {
+   "id": "s0",
+   "room": "sarang",
+   "position": [
+    0.1544,
+    2.14,
+    -2.4855
+   ],
+   "imageYawDeg": 110.1,
+   "neighbors": [
+    "s1",
+    "s5"
+   ],
+   "floorY": 0.69,
+   "source": "wolhajeong360-sarang:pano_camera0/c03_00097.jpg"
+  },
+  {
+   "id": "s1",
+   "room": "sarang",
+   "position": [
+    0.3221,
+    2.14,
+    -3.3796
+   ],
+   "imageYawDeg": 109.7,
+   "neighbors": [
+    "s0",
+    "s2",
+    "s4"
+   ],
+   "floorY": 0.69,
+   "source": "wolhajeong360-sarang:pano_camera0/c03_00676.jpg"
+  },
+  {
+   "id": "s2",
+   "room": "sarang",
+   "position": [
+    0.1249,
+    2.14,
+    -4.2528
+   ],
+   "imageYawDeg": 109.4,
+   "neighbors": [
+    "s1",
+    "s3"
+   ],
+   "floorY": 0.69,
+   "source": "wolhajeong360-sarang:pano_camera0/c03_00802.jpg"
+  },
+  {
+   "id": "s3",
+   "room": "sarang",
+   "position": [
+    -0.7079,
+    2.14,
+    -4.3822
+   ],
+   "imageYawDeg": 109.2,
+   "neighbors": [
+    "s2",
+    "s4"
+   ],
+   "floorY": 0.69,
+   "source": "wolhajeong360-sarang:pano_camera0/c03_00905.jpg"
+  },
+  {
+   "id": "s4",
+   "room": "sarang",
+   "position": [
+    -0.976,
+    2.14,
+    -3.475
+   ],
+   "imageYawDeg": 108.3,
+   "neighbors": [
+    "s1",
+    "s3",
+    "s5"
+   ],
+   "floorY": 0.69,
+   "source": "wolhajeong360-sarang:pano_camera0/c03_01039.jpg"
+  },
+  {
+   "id": "s5",
+   "room": "sarang",
+   "position": [
+    -0.9782,
+    2.14,
+    -2.6315
+   ],
+   "imageYawDeg": 105.4,
+   "neighbors": [
+    "s0",
+    "s4",
+    "n2"
+   ],
+   "floorY": 0.69,
+   "source": "wolhajeong360-sarang:pano_camera0/c03_01930.jpg"
   }
  ],
  "doorFx": {
   "duration": 0.9,
   "sound": true,
   "note": "문 여는 연출 설정(두 조건 공통). 문은 실제 문이 있는 자리에만 둔다(대표 결정 2026-09-26: 왜곡 금지). 대문간–앞마당 사이에는 실제 문짝이 없어 문을 두지 않는다. 실제 대문은 통로 거리 쪽 끝(탐색 범위 밖)."
- }
+ },
+ "doors": [
+  {
+   "id": "d-sarang",
+   "name": "앞마당–별채 사랑방 문",
+   "fromRoom": "yard",
+   "toRoom": "sarang",
+   "position": [
+    -1.685,
+    0.671,
+    -2.16
+   ],
+   "yaw": -86.4,
+   "width": 0.92,
+   "height": 1.37,
+   "style": "hanok-double",
+   "open": "swing-out",
+   "texture": "doors/sarang-front.jpg",
+   "textureBack": "doors/sarang-back.jpg",
+   "note": "실제 문: 툇마루 위의 유리 격자 쌍여닫이(亞자 살). 위치·폭·높이는 3DGS에서 문틀 모서리를 잰 값, 겉·속 그림은 두 모델에서 정면으로 렌더해 펴 낸 것. 안쪽은 방석 의자(데이베드)가 왼쪽 문짝 아래를 가려 그 부분은 오른쪽 문짝을 뒤집어 채움. 여는 방향은 안쪽 데이베드 때문에 바깥(앞마당 쪽)으로 추정."
+  }
+ ]
 }

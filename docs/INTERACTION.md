@@ -181,6 +181,21 @@
 - 시험: drjohnson을 식당 문에서 두 모델로 자른 분할 테스트(`scripts/split-scene-test.mjs`, 겹침 1 m를 일부러 남김)와 `nav.split-test.json`:
   `/?scene=drjohnson-split-parlour&app=1&space=drjohnson&navfile=nav.split-test.json`
 
+### 6-3-월하정. 별채 사랑방 (따로 찍은 모델, 2026-09-26)
+- **정렬**: 사랑방은 360 영상 0010으로 따로 학습한 모델(`wolhajeong360-sarang`)이다.
+  - 모든 클립을 함께 돌린 SfM은 0010을 잘못 놓아 쓸 수 없었다. 대신 **실제 사랑방 문**을 앞마당 모델(바깥 면)과 사랑방 모델(안쪽 면)에서 각각 재어 맞췄다: 문틀 위 모서리와 양쪽 세로 변, 좌우 반전.
+  - 문틀 네 변이 5 cm 안에서 맞고, 폭·높이 비율이 1% 안에서 일치한다(0.645 / 0.638).
+  - 사랑방 모델은 약 16° 기울고 1.55배 크게 복원되어 있었다. nav.json 사랑방 방의 `sceneTransform`(크기·회전 사원수·위치)과 `floorY`(바닥 0.69 m, 문지방 높이)가 이를 바로잡는다. 장면 파일은 게시된 그대로 두고, 뷰어가 불러올 때 적용한다(`viewer/src/app/placement.js`).
+  - 결과: 사랑방은 앞마당을 사이에 두고 안채 거실과 마주 선다. 숙소 설명("안채와 별채 사랑방이 앞마당을 두고 마주 서 있고")과 같다.
+  - 확인: `docs/checks/sarang/overlay-top.png`(두 모델의 벽과 촬영 경로를 위에서 겹친 그림), 평면도.
+- **문**: 실제 문(툇마루 위, 유리 격자 쌍여닫이, 폭 0.92 m, 높이 1.37 m)을 그 자리에 둔다.
+  - 겉·속 그림은 두 모델에서 문을 정면으로 렌더해 편 것이다(`public/spaces/wolhajeong/doors/`). 속 그림은 데이베드가 가린 왼쪽 아래를 오른쪽 문짝을 뒤집어 채웠다.
+- **드나들기(지금 방식)**: 앞마당에서 문(또는 문 너머 방)을 두 번 탭한다. 그러면 문 앞 0.9 m까지 걸어가 → 문 쪽으로 천천히 돌고 → 문이 열리고(0.9초, 다른 문과 같음) → 짧게 어두워진 뒤(0.2초) 같은 방향 그대로 문을 지나 사랑방 바닥 높이에 선다 → 방 가운데 쪽으로 천천히 돈다(최대 약 70°/s) → 문이 닫힌다. 안에서도 같다.
+  - 이 방식을 쓴 이유: 두 모델의 문지방·데이베드 재구성 때문에 걸어서 지나가는 길이 아직 만들어지지 않는다.
+  - 기록: `door_transit` {door, from, to} + `door_open` / `door_close`.
+- 평면도(`bake-plan.mjs`)와 촬영 지점(`space-from-scene.mjs`)도 같은 변환으로 사랑방을 넣는다. 사랑방 모델이 다시 학습되면 문틀을 다시 재서 `sceneTransform`을 고친다.
+- 확인: `scripts/sarang-check.mjs` → `docs/checks/sarang/`(휴대폰 세로·가로, 데스크톱).
+
 ### 6-4. 기록
 - `door_open` {door, from, to, trigger: path | approach | near | hop}, `door_pass` {door, from, to}, `door_close` {door, at, trigger}, `doors`(시작 시 문 목록·소리·시간), `portal_load` {scene, ms}. 두 조건 모두 같은 이름으로 기록된다.
 

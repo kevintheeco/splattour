@@ -36,6 +36,27 @@ const res = await page.evaluate(async ({ space, scene, P, ROT, q }) => {
   if (!r.ok) throw new Error(`no /scenes/${scene}/lod/occupancy.bin (bake it: node scripts/bake-lod-aux.mjs ${scene})`);
   const o = Occupancy.fromBuffer(await r.arrayBuffer());
   const nav = await (await fetch(`/spaces/${space}/nav.json`)).json();
+  // rooms captured as their own model (nav rooms[].sceneTransform, e.g. 사랑방): their walls, placed, inside their region
+  for (const room of (nav.rooms || []).filter((rr) => rr.scene && rr.scene !== scene && rr.sceneTransform && rr.region)) {
+    const { placeOccupancy } = await import("/src/app/placement.js");
+    const rr2 = await fetch(`/scenes/${room.scene}/lod/occupancy.bin`);
+    if (!rr2.ok) continue;
+    const ob = placeOccupancy(Occupancy.fromBuffer(await rr2.arrayBuffer()), room.sceneTransform);
+    const R = room.region, yaw = ((R.yaw || 0) * Math.PI) / 180, c = Math.cos(yaw), sn = Math.sin(yaw);
+    const inR = (x, y, z) => { const dx = x - R.center[0], dz = z - R.center[2]; const lx = dx * c - dz * sn, lz = dx * sn + dz * c; return Math.abs(lx) <= R.size[0] / 2 && Math.abs(lz) <= R.size[2] / 2 && Math.abs(y - R.center[1]) <= R.size[1] / 2; };
+    // grow the grid to hold the room, then take the room model's walls inside its box
+    const box = o.box.clone().union(ob.box), v0 = o.voxel;
+    const nx2 = Math.ceil((box.max.x - box.min.x) / v0), ny2 = Math.ceil((box.max.y - box.min.y) / v0), nz2 = Math.ceil((box.max.z - box.min.z) / v0);
+    const solid = new Uint8Array(nx2 * ny2 * nz2), P = { x: 0, y: 0, z: 0 };
+    for (let y = 0; y < ny2; y++) for (let z = 0; z < nz2; z++) for (let x = 0; x < nx2; x++) {
+      P.x = box.min.x + (x + 0.5) * v0; P.y = box.min.y + (y + 0.5) * v0; P.z = box.min.z + (z + 0.5) * v0;
+      const occd = inR(P.x, P.y, P.z) ? ob.occupied(P) : o.occupied(P);
+      if (occd) solid[(y * nz2 + z) * nx2 + x] = 1;
+    }
+    Object.assign(o, { box, nx: nx2, ny: ny2, nz: nz2, solid });
+    // its capture points stand on its floor
+    tour.nodes.push(...nav.nodes.filter((n) => n.room === room.id).map((n) => ({ id: n.id, floorY: room.floorY, position: n.position })));
+  }
   const v = o.voxel, nx = o.nx, nz = o.nz, N = nx * nz;
   const floors = tour.nodes.map((n) => n.floorY).sort((a, b) => a - b);
   const fy = floors[floors.length >> 1];

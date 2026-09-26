@@ -63,7 +63,11 @@ function streamState(splat) {
   const want = pager.fetchPriority.filter((f) => f.splats === splat.paged);
   const have = want.filter((f) => pager.getSplatsChunk(f.splats, f.chunk)).length;
   const root = !!pager.getSplatsChunk(splat.paged, 0);
-  return { root, frac: want.length ? have / want.length : 0, done: root && have === want.length, have, want: want.length };
+  // a phone's page pool can hold fewer pages than the view asks for (월하정:
+  // 62-chunk tree, 40-page pool): "sharp" is as much as the pool can hold
+  const cap = Math.max(1, Math.floor((spark.maxPagedSplats || Infinity) / 65536));
+  const need = Math.min(want.length, cap);
+  return { root, frac: need ? Math.min(1, have / need) : 0, done: root && have >= need, have, want: want.length, cap };
 }
 
 function applyTransform(obj, t) {
@@ -594,6 +598,8 @@ async function main() {
     let goal, lookAt = null;
     const hitY = o.y + dir.y * dist;
     const hitP = o.clone().addScaledVector(dir, dist);
+    // a door into a room captured as its own model (app/appmode.js portalTap)
+    if (app?.portalTap?.(o, dir, dist, dist < 25 ? hitP : null)) { hideHint(); return; }
     // Tapped into another room you can't walk into (behind a wall or a door the
     // reconstruction closed, e.g. 월하정 거실) that the tour links to: go there
     // the way the tour moves between separate parts, fading through black.
@@ -909,9 +915,13 @@ async function main() {
   // Another room's model in the same space frame (app/portals.js): loaded
   // near a door to it, the same way as the first one (streamed tree + baked
   // walls when the scene has them, else the file and walls built from it).
-  async function loadExtraScene(name) {
+  // `room`: its nav.json entry; a sceneTransform places a separately captured
+  // room model into this space's frame (app/placement.js)
+  async function loadExtraScene(name, room = null) {
     const base = new URL(`${cloudBase || ""}/scenes/${encodeURIComponent(name)}/`, location.href);
     const t2 = await loadTour(base);
+    const xf = room?.sceneTransform || null;
+    const place = xf ? await import("./app/placement.js") : null;
     let s, o = null;
     if (t2.splatMode === "lod" && t2.lod?.occupancy) {
       s = new SplatMesh({ url: t2.splatUrl, paged: true });
@@ -929,6 +939,11 @@ async function main() {
       await s.initialized;
       s.updateMatrixWorld(true);
       o = new Occupancy(s, t2);
+    }
+    if (place) {
+      place.placeMesh(s, xf);
+      place.placeTour(t2, xf, room.floorY);
+      o = place.placeOccupancy(o, xf);
     }
     // the same progressive rule as the first scene: the room's full file replaces its tree when loaded
     if (s.paged && !t2.phone && !params.get("quality") && t2.fallbackUrl) {
@@ -1100,7 +1115,14 @@ async function main() {
       pill.classList.add("show");
       return;
     }
+    // once sharp, the pill stays away (walking on changes the wanted pages a little all the time)
+    if (streaming.doneAt) { pill.classList.remove("show"); return; }
     const st = streamState(streaming.splat);
+    if (st.root && st.frac >= 0.97) st.done = true;
+    // also done when nothing more arrives for 4 s (the pager has what it will get for this view)
+    const nowT = performance.now();
+    if (st.have !== streaming.lastHave) { streaming.lastHave = st.have; streaming.lastChange = nowT; }
+    if (st.root && streaming.lastChange && nowT - streaming.lastChange > 4000) st.done = true;
     streaming.doneFrames = st.done ? (streaming.doneFrames || 0) + 1 : 0;
     if (streaming.doneFrames >= 20) {
       if (!streaming.doneAt) {
