@@ -7,7 +7,7 @@ npm install
 cp .env.example .env.local
 npm run dev
 ```
-- 월하정 3DGS: `http://localhost:5173/?scene=wolhajeong360-hq&from=cloud`
+- 월하정 3DGS: `http://localhost:5190/?scene=wolhajeong360-hq&from=cloud`
 - 사랑방: `?scene=wolhajeong360-sarang&from=cloud`
 - 장면 파일은 git에 없음(용량). `https://media.3dgstour.com/scenes/<장면>/` 에 공개로 있음
   - `tour.json`, `scene.spz`(데스크톱), `scene.mobile.spz`(폰), `lod/`(폰 스트리밍)
