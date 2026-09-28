@@ -18,3 +18,6 @@ scenes/index.json
 web-api/node_modules/
 docs/video/
 scenes/**/lod/
+
+.env
+.env.local
