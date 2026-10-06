@@ -83,10 +83,11 @@ async function main() {
   let sceneFrozen = false;
   // Inside the listing app (&app=1&space=<id>): the chrome shared with the 360° viewer, see app/appmode.js
   const app = params.get("app") === "1" ? await import("./app/appmode.js").then((m) => m.prepare({ params, tour })) : null;
-  document.title = `${tour.title} · SplatTour`;
-  $("#title").textContent = tour.title;
+  const displayTitle = app ? tour.title.replace(/\s*\([^)]*\)\s*$/, "").trim() : tour.title;
+  document.title = `${displayTitle} · SplatTour`;
+  $("#title").textContent = displayTitle;
   $("#subtitle").textContent = tour.subtitle;
-  $("#loaderTitle").textContent = tour.title;
+  $("#loaderTitle").textContent = displayTitle;
   // Published site: a way back to the list/upload home.
   if (import.meta.env.PROD && !app) {
     const back = document.createElement("a");
@@ -1067,7 +1068,7 @@ async function main() {
     look.update(0); // Input stays frozen, but render the destination camera immediately.
     camera.updateMatrixWorld(true);
     Object.assign(stepper, { goal: null, anim: null, active: false, lastX: position.x, lastZ: position.z });
-    $("#title").textContent = tour.title; $("#subtitle").textContent = tour.subtitle;
+    $("#title").textContent = displayTitle; $("#subtitle").textContent = tour.subtitle;
     $("#nodeName").textContent = definition.name;
     $("#streamPill")?.classList.remove("show");
     const address = new URL(location.href);
