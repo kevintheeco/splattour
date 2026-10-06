@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "scene": "wolhajeong360-hq",
+  "image": "spatial-map.png",
+  "referenceSize": [1952, 1277],
+  "marker": {
+    "referenceImage": "location-marker.png",
+    "compactScale": 0.32,
+    "fullScale": 0.5
+  },
+  "rotation": -0.2705226535897931,
+  "compactBounds": [460, 205, 1450, 985],
+  "axes": {
+    "u": [[-9.5, 550], [-7.8, 670], [-6.2, 865], [-5.8, 910], [-1.6, 1435], [-0.8, 1500], [2.0, 1840]],
+    "w": [[-6.2, 285], [-5.5, 320], [-1.0, 767], [-0.5, 820], [1.5, 1020], [3.0, 1120]]
+  },
+  "calibration": {
+    "approximate": true,
+    "frame": "u = x cos(rotation) + z sin(rotation); w = -x sin(rotation) + z cos(rotation)",
+    "method": "Continuous piecewise axis mapping, based on the existing baked plan orientation and nav capture positions. Coordinates use a 1952 x 1277 reference size; the original PNG is rendered at that size.",
+    "roomCorrespondence": {"yard": "Garden / entrance passage", "living": "Room1", "dark": "Room1", "sarang": "Room2"},
+    "note": "Illustrated plan is not surveyed geometry. Room1 includes the anchae wing; Room2 is the sarang wing. Kitchen and bathroom geometry have no surveyed control points. Tune axis knots against on-site landmarks if greater accuracy is needed. Do not reuse with a different scene coordinate frame."
+  }
+}
