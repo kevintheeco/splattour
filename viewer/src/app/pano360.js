@@ -10,8 +10,9 @@
 // placeholder (and only with &dev=1 while nav.json says the captures are not ready).
 import * as THREE from "three";
 import { LookControls } from "../look.js";
-import { loadListing, loadNav, loadTasks, esc, bearing, spaceBase } from "./data.js";
+import { loadListing, loadNav, loadPanoNav, loadTasks, esc, bearing, spaceBase } from "./data.js";
 import { icon } from "./icons.js";
+import { capturePicker } from "./capture-picker.js";
 import { ViewerChrome, matchLook } from "./chrome.js";
 import { TaskRunner } from "./tasks.js";
 import { createStudyLog, studyBadge, summarizeApp } from "./studylog.js";
@@ -42,6 +43,12 @@ const frag = /* glsl */ `
   uniform sampler2D texB;
   uniform float yawA;
   uniform float yawB;
+  uniform float exposureA;
+  uniform float exposureB;
+  uniform vec3 colorBalanceA;
+  uniform vec3 colorBalanceB;
+  uniform float highlightsA;
+  uniform float highlightsB;
   uniform float mixAB;
   uniform float radA;
   uniform float radB;
@@ -62,12 +69,21 @@ const frag = /* glsl */ `
     if (h < 0.0) return d;
     return normalize(q + (-b + sqrt(h)) * d);
   }
+  vec3 grade(vec3 color, float exposure, vec3 balance, float highlights) {
+    float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    // Keep the light fixtures luminous while darkening the walls and bedding.
+    float gain = mix(exposure, 1.0, highlights * smoothstep(0.65, 0.95, luminance));
+    return color * gain * balance;
+  }
   void main() {
     vec3 d = normalize(vDir);
     vec3 da = warp > 0.5 ? through(d, eye, posA, radA) : d;
     vec3 db = warp > 0.5 ? through(d, eye, posB, radB) : d;
     vec4 a = texture2D(texA, equi(da, yawA));
     vec4 b = texture2D(texB, equi(db, yawB));
+    // Apply each capture's color grade in linear light before blending views.
+    a.rgb = grade(a.rgb, exposureA, colorBalanceA, highlightsA);
+    b.rgb = grade(b.rgb, exposureB, colorBalanceB, highlightsB);
     gl_FragColor = mix(a, b, mixAB);
     #include <colorspace_fragment>
   }`;
@@ -78,7 +94,7 @@ const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 async function main() {
   const listing = await loadListing(spaceId);
-  const nav = await loadNav(spaceId, listing, params.get("navfile"));
+  const nav = await (STUDY ? loadNav : loadPanoNav)(spaceId, listing, params.get("navfile"));
   document.title = `${listing.title} · 360° 시점 탐색`;
   const backHref = `/listing.html?id=${encodeURIComponent(spaceId)}`;
 
@@ -100,6 +116,9 @@ async function main() {
   blank.needsUpdate = true;
   const U = {
     texA: { value: blank }, texB: { value: blank }, yawA: { value: 0 }, yawB: { value: 0 }, mixAB: { value: 0 },
+    exposureA: { value: 1 }, exposureB: { value: 1 },
+    colorBalanceA: { value: new THREE.Vector3(1, 1, 1) }, colorBalanceB: { value: new THREE.Vector3(1, 1, 1) },
+    highlightsA: { value: 0 }, highlightsB: { value: 0 },
     radA: { value: 3 }, radB: { value: 3 }, posA: { value: new THREE.Vector3() }, posB: { value: new THREE.Vector3() },
     eye: { value: new THREE.Vector3() }, warp: { value: 0 },
   };
@@ -123,6 +142,16 @@ async function main() {
       } else {
         t = new THREE.CanvasTexture(placeholder(nav.roomName(node.room), node.id));
       }
+      // Bound decoded GPU memory on phones while keeping the original capture intact.
+      const limit = Math.min(renderer.capabilities.maxTextureSize, PHONE ? 3072 : 8192);
+      if (t.image.width > limit) {
+        const scaled = document.createElement("canvas");
+        scaled.width = limit;
+        scaled.height = Math.round(t.image.height * limit / t.image.width);
+        scaled.getContext("2d").drawImage(t.image, 0, 0, scaled.width, scaled.height);
+        t.image = scaled;
+        t.needsUpdate = true;
+      }
       t.colorSpace = THREE.SRGBColorSpace;
       t.wrapS = THREE.RepeatWrapping;
       t.minFilter = THREE.LinearFilter;
@@ -131,12 +160,13 @@ async function main() {
       return t;
     })();
     cache.set(node.id, p);
+    p.catch(() => { if (cache.get(node.id) === p) cache.delete(node.id); });
     // LRU: phones hold a few 4K panoramas at most (32 MB each on the GPU)
     while (cache.size > maxTex) {
       const [id, old] = cache.entries().next().value;
       if (id === current?.id) { cache.delete(id); cache.set(id, old); continue; }
       cache.delete(id);
-      old.then((t) => { if (U.texA.value !== t && U.texB.value !== t) t.dispose(); });
+      old.then((t) => { if (U.texA.value !== t && U.texB.value !== t) t.dispose(); }).catch(() => {});
     }
     return p;
   }
@@ -147,9 +177,6 @@ async function main() {
   const hsGroup = new THREE.Group();
   scene.add(hsGroup);
   const labels = $("#labels");
-  // small and quiet: only a hop into another room gets a name label (showSpots)
-  const ringGeo = new THREE.RingGeometry(0.16, 0.2, 48).rotateX(-Math.PI / 2);
-  const discGeo = new THREE.CircleGeometry(0.16, 48).rotateX(-Math.PI / 2);
   let spots = [];
   function hotspotDir(from, to) {
     const o = from.hotspots?.find((h) => h.to === to.id);
@@ -166,24 +193,20 @@ async function main() {
       const { yaw, d } = hotspotDir(node, to);
       const g = new THREE.Group();
       g.position.set(-Math.sin(yaw) * d, -EYE, -Math.cos(yaw) * d);
-      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthTest: false }));
-      const disc = new THREE.Mesh(discGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthTest: false }));
-      ring.renderOrder = disc.renderOrder = 2;
-      g.add(disc, ring);
       hsGroup.add(g);
-      let label = null;
-      if (to.room !== node.room) {
-        label = document.createElement("button");
-        label.className = "pv-label";
-        label.innerHTML = `${esc(nav.roomName(to.room))}${icon("chevron")}`;
-        label.addEventListener("click", () => go(to));
-        labels.appendChild(label);
-      }
-      spots.push({ to, g, disc, label, yaw, t: 0 });
+      const label = document.createElement("button");
+      label.className = "pv-hotspot";
+      label.type = "button";
+      const name = to.label || nav.roomName(to.room);
+      label.setAttribute("aria-label", `${name}(으)로 이동`);
+      label.innerHTML = `<span class="pv-hotspot-circle"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 25V8M8 16l8-8 8 8"/></svg></span><span class="pv-hotspot-name">${esc(name)}</span>`;
+      label.addEventListener("click", () => go(to));
+      labels.appendChild(label);
+      spots.push({ to, g, label, yaw, t: 0 });
     }
   }
   function clearSpots() {
-    for (const s of spots) { hsGroup.remove(s.g); s.g.children.forEach((m) => m.material.dispose()); s.label?.remove(); }
+    for (const s of spots) { hsGroup.remove(s.g); s.label?.remove(); }
     spots = [];
   }
   const _v = new THREE.Vector3();
@@ -191,17 +214,14 @@ async function main() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     for (const s of spots) {
       s.t = Math.min(1, s.t + dt * 3);
-      const k = smoother(s.t) * (s.hover ? 1.18 : 1);
-      s.g.scale.setScalar(Math.max(0.001, k));
-      s.disc.material.opacity = s.hover ? 0.45 : 0.16;
-      _v.copy(s.g.position).setY(s.g.position.y + 0.42).project(camera);
-      s.screen = { x: (_v.x * 0.5 + 0.5) * w, y: (-_v.y * 0.5 + 0.5) * h, front: _v.z < 1 };
       _v.copy(s.g.position).project(camera);
-      s.base = { x: (_v.x * 0.5 + 0.5) * w, y: (-_v.y * 0.5 + 0.5) * h, front: _v.z < 1 };
-      if (s.label) {
-        const vis = s.screen.front && s.screen.x > -40 && s.screen.x < w + 40;
-        s.label.style.display = vis ? "" : "none";
-        if (vis) s.label.style.transform = `translate(${s.screen.x.toFixed(1)}px, ${s.screen.y.toFixed(1)}px) translate(-50%, -100%)`;
+      s.base = { x: (_v.x * 0.5 + 0.5) * w, y: (-_v.y * 0.5 + 0.5) * h, front: _v.z >= -1 && _v.z < 1 };
+      const vis = s.base.front && s.base.x > 28 && s.base.x < w - 28 && s.base.y > 70 && s.base.y < h - 55;
+      s.label.hidden = !vis;
+      if (vis) {
+        s.label.style.transform = `translate(${s.base.x.toFixed(1)}px, ${s.base.y.toFixed(1)}px) translate(-50%, -28px)`;
+        s.label.style.opacity = smoother(s.t);
+        s.label.classList.toggle("hover", !!s.hover);
       }
     }
   }
@@ -286,6 +306,10 @@ async function main() {
     const t = await tex(node);
     U.texA.value = U.texB.value = t;
     U.yawA.value = U.yawB.value = yawOfNode(node);
+    U.exposureA.value = U.exposureB.value = node.exposure ?? 1;
+    U.highlightsA.value = U.highlightsB.value = node.highlightPreservation ?? 0;
+    U.colorBalanceA.value.fromArray(node.colorBalance ?? [1, 1, 1]);
+    U.colorBalanceB.value.copy(U.colorBalanceA.value);
     U.posA.value.copy(V(node.position));
     U.posB.value.copy(V(node.position));
     U.eye.value.copy(V(node.position));
@@ -293,6 +317,14 @@ async function main() {
     U.warp.value = 0;
     if (yaw !== undefined) look.set(yaw, START_PITCH);
     arrive(node);
+    preloadNeighbors(node);
+  }
+
+  function preloadNeighbors(node) {
+    for (const id of node.neighbors) {
+      const n = nav.byId.get(id);
+      if (n) tex(n).catch(() => {});
+    }
   }
 
   async function go(to) {
@@ -305,16 +337,31 @@ async function main() {
     // a door on the way opens first (the 3DGS walker opens it while walking up to it)
     const hop = doorSet ? doorsOnHop(doorSet.doors, from, to) : [];
     for (const h of hop) shownDoors.add(h.door.id);
-    const [t] = await Promise.all([tex(to), ...hop.map((h) => doorSet.openFor(h.door.id, "hop"))]);
+    let t;
+    try {
+      [t] = await Promise.all([tex(to), ...hop.map((h) => doorSet.openFor(h.door.id, "hop"))]);
+    } catch {
+      busy = false;
+      for (const h of hop) doorSet.release(h.door.id);
+      showSpots(from);
+      chrome.toast("사진을 불러오지 못했어요. 화살표를 눌러 다시 시도해 주세요.");
+      return;
+    }
     const dist = Math.hypot(to.position[0] - from.position[0], to.position[2] - from.position[2]);
     U.texB.value = t;
     U.yawB.value = yawOfNode(to);
+    U.exposureB.value = to.exposure ?? 1;
+    U.highlightsB.value = to.highlightPreservation ?? 0;
+    U.colorBalanceB.value.fromArray(to.colorBalance ?? [1, 1, 1]);
     U.posB.value.copy(V(to.position));
     U.radA.value = U.radB.value = Math.max(2.6, dist * 1.3);
     U.warp.value = style === "warp" ? 1 : 0;
     await new Promise((resolve) => { fade = { t: 0, resolve, from, to }; });
     U.texA.value = t;
     U.yawA.value = U.yawB.value;
+    U.exposureA.value = U.exposureB.value;
+    U.highlightsA.value = U.highlightsB.value;
+    U.colorBalanceA.value.copy(U.colorBalanceB.value);
     U.posA.value.copy(U.posB.value);
     U.eye.value.copy(U.posB.value);
     U.mixAB.value = 0;
@@ -323,7 +370,7 @@ async function main() {
     busy = false;
     for (const h of hop) doorSet.release(h.door.id); // closes behind you, as in 3DGS
     arrive(to);
-    for (const id of to.neighbors) { const n = nav.byId.get(id); if (n) tex(n); } // warm the next hop
+    preloadNeighbors(to);
   }
 
   function stepFade(dt) {
@@ -384,7 +431,7 @@ async function main() {
   // ---------- chrome, study, tasks ----------
   const chrome = new ViewerChrome({
     spaceTitle: listing.title, condition: "pano", backHref: STUDY ? "#" : backHref, nav, look, base: spaceBase(spaceId),
-    plan: params.get("plan") !== "0",
+    plan: params.get("plan") !== "0" && !nav.status?.positionsApproximate,
     onBack: () => (STUDY ? confirm("실험을 그만두고 나갈까요?") : true),
   });
   if (nav.devOnly) chrome.dev(nav.nodes.some((n) => !n.panoUrl) ? "360 촬영본이 도착하기 전의 자리표시 화면이에요" : "3DGS에서 렌더링한 임시 파노라마예요. 실험의 360° 조건은 실제 360 촬영본만 씁니다");
@@ -420,7 +467,7 @@ async function main() {
 
   // ---------- start ----------
   const startNode = nav.byId.get(params.get("node")) || nav.start;
-  await place(startNode, { yaw: yawOfNode(startNode) });
+  await place(startNode, { yaw: (startNode.startYawDeg ?? startNode.imageYawDeg ?? 0) * DEG });
   $("#loader").classList.add("done");
   if (tasks.length) {
     runner = new TaskRunner({
@@ -437,14 +484,16 @@ async function main() {
   // first-visit hint (off with &onboarding=0)
   const hint = document.createElement("div");
   hint.className = "vc-hint";
-  hint.innerHTML = PHONE ? "손가락으로 밀어서 둘러보고<br />바닥의 흰 원을 눌러 옮겨 가세요" : "드래그해서 둘러보고<br />바닥의 흰 원을 눌러 옮겨 가세요";
+  hint.innerHTML = PHONE ? "손가락으로 밀어서 둘러보고<br />원형 화살표를 눌러 이동하세요" : "드래그해서 둘러보고<br />원형 화살표를 눌러 이동하세요";
   if (params.get("onboarding") === "0" || tasks.length) hint.classList.add("gone");
   document.body.appendChild(hint);
   function hideHint() { hint.classList.add("gone"); }
   // ≡ menu, the subset that applies to the 360° viewer (the same look as the
   // 3DGS one); not in the study, as there.
   if (!STUDY) {
+    const openCaptures = nav.captureBrowser ? capturePicker({ nav, getCurrent: () => current, go: (id) => go(nav.byId.get(id)) }) : null;
     chrome.setMenu([
+      ...(openCaptures ? [{ id: "captures", icon: "map", label: `촬영 지점 ${nav.nodes.length}곳`, run: openCaptures }] : []),
       { id: "help", icon: "help", label: "도움말 · 조작법", run: () => { hint.classList.remove("gone"); setTimeout(hideHint, 4500); } },
       { id: "fullscreen", icon: "expand", label: "전체 화면", run: () => chrome.fullscreen() },
       { id: "sound", icon: "sound", label: "소리", run: () => { doorSet.sound.on = !doorSet.sound.on; chrome.toast(doorSet.sound.on ? "문 소리 켜짐" : "문 소리 꺼짐"); }, on: () => !!doorSet?.sound?.on, hidden: () => !doorSet },

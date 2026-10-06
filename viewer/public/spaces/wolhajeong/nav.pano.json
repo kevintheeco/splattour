@@ -1,0 +1,1332 @@
+{
+  "version": 1,
+  "status": {
+    "ready": true,
+    "devPlaceholder": false,
+    "positionsApproximate": true,
+    "source": "360panorama_추가: 38 unique original equirectangular photos",
+    "note": "원본 46장 중 SHA-256이 같은 중복 8장 제외. 기존 4개 지점 보존, 34개 추가. 방·문 기준 수동 연결. 좌표와 추가 화살표 방향은 시각 추정이며 실측·SfM 정합 전. 동선은 3DGS/실험 좌표계와 별개. 추가 화살표는 원본 파노라마의 출입구·통로를 보고 수동으로 방향을 지정함."
+  },
+  "transition": {
+    "style": "fade",
+    "duration": 0.35
+  },
+  "start": "yard",
+  "rooms": [
+    {
+      "id": "yard",
+      "name": "앞마당"
+    },
+    {
+      "id": "living",
+      "name": "안채 거실"
+    },
+    {
+      "id": "bedroom",
+      "name": "침실 · 자쿠지"
+    },
+    {
+      "id": "bath",
+      "name": "자쿠지 옆 욕실"
+    },
+    {
+      "id": "small",
+      "name": "작은 침실 · 욕실"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "yard",
+      "room": "yard",
+      "label": "앞마당",
+      "position": [
+        0,
+        1.5,
+        0
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "living-entry",
+        "p069",
+        "p071",
+        "p099"
+      ],
+      "hotspots": [
+        {
+          "to": "living-entry",
+          "yawDeg": 77,
+          "pitchDeg": -23
+        },
+        {
+          "to": "p069",
+          "yawDeg": 136.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p071",
+          "yawDeg": -54.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p099",
+          "yawDeg": 0.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "pano/yard.jpg",
+      "startYawDeg": 65,
+      "captureNumber": 70,
+      "sourceFile": "IMG_20210206_085403_00_070.jpg",
+      "thumbnail": "/pano-additional/p070-thumb.jpg"
+    },
+    {
+      "id": "living-entry",
+      "room": "living",
+      "label": "거실 입구",
+      "position": [
+        -2.5,
+        1.5,
+        0
+      ],
+      "imageYawDeg": 177,
+      "neighbors": [
+        "yard",
+        "living-table",
+        "bedroom",
+        "p073",
+        "p088",
+        "p074"
+      ],
+      "hotspots": [
+        {
+          "to": "yard",
+          "yawDeg": 80,
+          "pitchDeg": -26
+        },
+        {
+          "to": "living-table",
+          "yawDeg": -34,
+          "pitchDeg": -30
+        },
+        {
+          "to": "bedroom",
+          "yawDeg": -126,
+          "pitchDeg": -21
+        },
+        {
+          "to": "p073",
+          "yawDeg": 54.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p088",
+          "yawDeg": -64.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p074",
+          "yawDeg": -126.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "pano/living-entry.jpg",
+      "captureNumber": 87,
+      "sourceFile": "IMG_20210206_095721_00_087.jpg",
+      "thumbnail": "/pano-additional/p087-thumb.jpg"
+    },
+    {
+      "id": "living-table",
+      "room": "living",
+      "label": "거실 테이블",
+      "position": [
+        -4,
+        1.5,
+        1.8
+      ],
+      "imageYawDeg": -52,
+      "neighbors": [
+        "living-entry",
+        "p089"
+      ],
+      "hotspots": [
+        {
+          "to": "living-entry",
+          "yawDeg": 34,
+          "pitchDeg": -25
+        },
+        {
+          "to": "p089",
+          "yawDeg": 90.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "pano/living-table.jpg",
+      "captureNumber": 90,
+      "sourceFile": "IMG_20210206_095837_00_090.jpg",
+      "thumbnail": "/pano-additional/p090-thumb.jpg"
+    },
+    {
+      "id": "bedroom",
+      "room": "bedroom",
+      "label": "침실 · 자쿠지",
+      "position": [
+        -4,
+        1.5,
+        -3
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "living-entry",
+        "p091",
+        "p077",
+        "p093"
+      ],
+      "hotspots": [
+        {
+          "to": "living-entry",
+          "yawDeg": 157,
+          "pitchDeg": -24
+        },
+        {
+          "to": "p091",
+          "yawDeg": 97.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p077",
+          "yawDeg": -136.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p093",
+          "yawDeg": 100.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "pano/bedroom.jpg",
+      "exposure": 0.1,
+      "colorBalance": [
+        1.15,
+        0.82,
+        0.4
+      ],
+      "highlightPreservation": 0.8,
+      "captureNumber": 92,
+      "sourceFile": "IMG_20210206_095905_00_092.jpg",
+      "thumbnail": "/pano-additional/p092-thumb.jpg"
+    },
+    {
+      "id": "p067",
+      "room": "yard",
+      "label": "대문 안쪽",
+      "position": [
+        3.7,
+        1.5,
+        0
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p068"
+      ],
+      "hotspots": [
+        {
+          "to": "p068",
+          "yawDeg": -18.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p067.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 67,
+      "sourceFile": "IMG_20210206_085311_00_067.jpg",
+      "thumbnail": "/pano-additional/p067-thumb.jpg"
+    },
+    {
+      "id": "p068",
+      "room": "yard",
+      "label": "마당 입구",
+      "position": [
+        2.7,
+        1.5,
+        0
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p067",
+        "p069",
+        "p100"
+      ],
+      "hotspots": [
+        {
+          "to": "p067",
+          "yawDeg": 144.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p069",
+          "yawDeg": -28.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p100",
+          "yawDeg": 151.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p068.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 68,
+      "sourceFile": "IMG_20210206_085321_00_068.jpg",
+      "thumbnail": "/pano-additional/p068-thumb.jpg"
+    },
+    {
+      "id": "p069",
+      "room": "yard",
+      "label": "마당 길",
+      "position": [
+        1.3,
+        1.5,
+        0
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p068",
+        "yard"
+      ],
+      "hotspots": [
+        {
+          "to": "p068",
+          "yawDeg": 144.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "yard",
+          "yawDeg": -7.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p069.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 69,
+      "sourceFile": "IMG_20210206_085351_00_069.jpg",
+      "thumbnail": "/pano-additional/p069-thumb.jpg"
+    },
+    {
+      "id": "p071",
+      "room": "yard",
+      "label": "거실 앞 툇마루",
+      "position": [
+        -1.2,
+        1.5,
+        0
+      ],
+      "imageYawDeg": 180,
+      "neighbors": [
+        "yard",
+        "p072",
+        "p096"
+      ],
+      "hotspots": [
+        {
+          "to": "yard",
+          "yawDeg": 7.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p072",
+          "yawDeg": 165.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p096",
+          "yawDeg": 14.4,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p071.jpg",
+      "startYawDeg": 180,
+      "captureNumber": 71,
+      "sourceFile": "IMG_20210206_085414_00_071.jpg",
+      "thumbnail": "/pano-additional/p071-thumb.jpg"
+    },
+    {
+      "id": "p072",
+      "room": "living",
+      "label": "거실 문 앞",
+      "position": [
+        -2.4,
+        1.5,
+        1
+      ],
+      "imageYawDeg": 177,
+      "neighbors": [
+        "p071",
+        "p073"
+      ],
+      "hotspots": [
+        {
+          "to": "p071",
+          "yawDeg": 129.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p073",
+          "yawDeg": -43.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p072.jpg",
+      "startYawDeg": 177,
+      "captureNumber": 72,
+      "sourceFile": "IMG_20210206_085435_00_072.jpg",
+      "thumbnail": "/pano-additional/p072-thumb.jpg"
+    },
+    {
+      "id": "p073",
+      "room": "living",
+      "label": "거실 안쪽",
+      "position": [
+        -3.2,
+        1.5,
+        1.4
+      ],
+      "imageYawDeg": 177,
+      "neighbors": [
+        "p072",
+        "living-entry"
+      ],
+      "hotspots": [
+        {
+          "to": "p072",
+          "yawDeg": -115.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "living-entry",
+          "yawDeg": -108.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p073.jpg",
+      "startYawDeg": 177,
+      "captureNumber": 73,
+      "sourceFile": "IMG_20210206_085450_00_073.jpg",
+      "thumbnail": "/pano-additional/p073-thumb.jpg"
+    },
+    {
+      "id": "p074",
+      "room": "bedroom",
+      "label": "침실 침대 옆",
+      "position": [
+        -3.9,
+        1.5,
+        -1.8
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "living-entry",
+        "p091",
+        "p093"
+      ],
+      "hotspots": [
+        {
+          "to": "living-entry",
+          "yawDeg": -136.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p091",
+          "yawDeg": 90.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p093",
+          "yawDeg": 129.6,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p074.jpg",
+      "startYawDeg": 50,
+      "captureNumber": 74,
+      "sourceFile": "IMG_20210206_085504_00_074.jpg",
+      "thumbnail": "/pano-additional/p074-thumb.jpg"
+    },
+    {
+      "id": "p075",
+      "room": "bath",
+      "label": "욕실 입구",
+      "position": [
+        -6.4,
+        1.5,
+        -3.4
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "p094",
+        "p076"
+      ],
+      "hotspots": [
+        {
+          "to": "p094",
+          "yawDeg": 61.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p076",
+          "yawDeg": -79.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p075.jpg",
+      "startYawDeg": 50,
+      "captureNumber": 75,
+      "sourceFile": "IMG_20210206_085527_00_075.jpg",
+      "thumbnail": "/pano-additional/p075-thumb.jpg"
+    },
+    {
+      "id": "p076",
+      "room": "bath",
+      "label": "욕실 세면대",
+      "position": [
+        -6.9,
+        1.5,
+        -3.4
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "p075",
+        "p095"
+      ],
+      "hotspots": [
+        {
+          "to": "p075",
+          "yawDeg": -36.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p095",
+          "yawDeg": -100.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p076.jpg",
+      "startYawDeg": 50,
+      "captureNumber": 76,
+      "sourceFile": "IMG_20210206_085537_00_076.jpg",
+      "thumbnail": "/pano-additional/p076-thumb.jpg"
+    },
+    {
+      "id": "p077",
+      "room": "bedroom",
+      "label": "자쿠지 창가",
+      "position": [
+        -5.4,
+        1.5,
+        -3.2
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "bedroom",
+        "p094"
+      ],
+      "hotspots": [
+        {
+          "to": "bedroom",
+          "yawDeg": 7.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p094",
+          "yawDeg": -126.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p077.jpg",
+      "startYawDeg": 50,
+      "captureNumber": 77,
+      "sourceFile": "IMG_20210206_085552_00_077.jpg",
+      "thumbnail": "/pano-additional/p077-thumb.jpg"
+    },
+    {
+      "id": "p078",
+      "room": "yard",
+      "label": "마당 건너 출입구",
+      "position": [
+        1.4,
+        1.5,
+        -3.5
+      ],
+      "imageYawDeg": 90,
+      "neighbors": [
+        "p098",
+        "p100",
+        "p080"
+      ],
+      "hotspots": [
+        {
+          "to": "p098",
+          "yawDeg": 115.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p100",
+          "yawDeg": -79.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p080",
+          "yawDeg": -7.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p078.jpg",
+      "startYawDeg": 90,
+      "captureNumber": 78,
+      "sourceFile": "IMG_20210206_085634_00_078.jpg",
+      "thumbnail": "/pano-additional/p078-thumb.jpg"
+    },
+    {
+      "id": "p080",
+      "room": "small",
+      "label": "작은 침실 입구",
+      "position": [
+        2.3,
+        1.5,
+        -4.8
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p078",
+        "p083",
+        "p104"
+      ],
+      "hotspots": [
+        {
+          "to": "p078",
+          "yawDeg": 133.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p083",
+          "yawDeg": -10.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p104",
+          "yawDeg": -7.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p080.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 80,
+      "sourceFile": "IMG_20210206_092214_00_080.jpg",
+      "thumbnail": "/pano-additional/p080-thumb.jpg"
+    },
+    {
+      "id": "p081",
+      "room": "small",
+      "label": "작은 침실 침대 옆",
+      "position": [
+        3.5,
+        1.5,
+        -5.1
+      ],
+      "imageYawDeg": 90,
+      "neighbors": [
+        "p086"
+      ],
+      "hotspots": [
+        {
+          "to": "p086",
+          "yawDeg": 43.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p081.jpg",
+      "startYawDeg": 90,
+      "captureNumber": 81,
+      "sourceFile": "IMG_20210206_092239_00_081.jpg",
+      "thumbnail": "/pano-additional/p081-thumb.jpg"
+    },
+    {
+      "id": "p083",
+      "room": "small",
+      "label": "작은 침실 통로 1",
+      "position": [
+        2.3,
+        1.5,
+        -5.3
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p080",
+        "p084"
+      ],
+      "hotspots": [
+        {
+          "to": "p080",
+          "yawDeg": 136.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p084",
+          "yawDeg": -10.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p083.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 83,
+      "sourceFile": "IMG_20210206_095323_00_083.jpg",
+      "thumbnail": "/pano-additional/p083-thumb.jpg"
+    },
+    {
+      "id": "p084",
+      "room": "small",
+      "label": "작은 침실 통로 2",
+      "position": [
+        2.4,
+        1.5,
+        -5.8
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p083",
+        "p085"
+      ],
+      "hotspots": [
+        {
+          "to": "p083",
+          "yawDeg": 136.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p085",
+          "yawDeg": -10.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p084.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 84,
+      "sourceFile": "IMG_20210206_095436_00_084.jpg",
+      "thumbnail": "/pano-additional/p084-thumb.jpg"
+    },
+    {
+      "id": "p085",
+      "room": "small",
+      "label": "작은 침실 창가",
+      "position": [
+        3.2,
+        1.5,
+        -6.3
+      ],
+      "imageYawDeg": 90,
+      "neighbors": [
+        "p084",
+        "p086",
+        "p105"
+      ],
+      "hotspots": [
+        {
+          "to": "p084",
+          "yawDeg": -79.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p086",
+          "yawDeg": 25.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p105",
+          "yawDeg": 21.6,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p085.jpg",
+      "startYawDeg": 90,
+      "captureNumber": 85,
+      "sourceFile": "IMG_20210206_095501_00_085.jpg",
+      "thumbnail": "/pano-additional/p085-thumb.jpg"
+    },
+    {
+      "id": "p086",
+      "room": "small",
+      "label": "작은 침실 침대 앞",
+      "position": [
+        3.5,
+        1.5,
+        -5.7
+      ],
+      "imageYawDeg": 90,
+      "neighbors": [
+        "p085",
+        "p081"
+      ],
+      "hotspots": [
+        {
+          "to": "p085",
+          "yawDeg": -61.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p081",
+          "yawDeg": 61.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p086.jpg",
+      "startYawDeg": 90,
+      "captureNumber": 86,
+      "sourceFile": "IMG_20210206_095525_00_086.jpg",
+      "thumbnail": "/pano-additional/p086-thumb.jpg"
+    },
+    {
+      "id": "p088",
+      "room": "living",
+      "label": "거실 책장 옆",
+      "position": [
+        -3.3,
+        1.5,
+        0.8
+      ],
+      "imageYawDeg": 177,
+      "neighbors": [
+        "living-entry",
+        "p089"
+      ],
+      "hotspots": [
+        {
+          "to": "living-entry",
+          "yawDeg": -86.4,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p089",
+          "yawDeg": -129.6,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p088.jpg",
+      "startYawDeg": 177,
+      "captureNumber": 88,
+      "sourceFile": "IMG_20210206_095735_00_088.jpg",
+      "thumbnail": "/pano-additional/p088-thumb.jpg"
+    },
+    {
+      "id": "p089",
+      "room": "living",
+      "label": "거실 테이블 옆",
+      "position": [
+        -3.8,
+        1.5,
+        1.3
+      ],
+      "imageYawDeg": 177,
+      "neighbors": [
+        "p088",
+        "living-table"
+      ],
+      "hotspots": [
+        {
+          "to": "p088",
+          "yawDeg": 151.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "living-table",
+          "yawDeg": -118.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p089.jpg",
+      "startYawDeg": 177,
+      "captureNumber": 89,
+      "sourceFile": "IMG_20210206_095808_00_089.jpg",
+      "thumbnail": "/pano-additional/p089-thumb.jpg"
+    },
+    {
+      "id": "p091",
+      "room": "bedroom",
+      "label": "침실 머리맡",
+      "position": [
+        -3.2,
+        1.5,
+        -2.7
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "p074",
+        "bedroom"
+      ],
+      "hotspots": [
+        {
+          "to": "p074",
+          "yawDeg": -104.4,
+          "pitchDeg": -30
+        },
+        {
+          "to": "bedroom",
+          "yawDeg": -43.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p091.jpg",
+      "startYawDeg": 50,
+      "captureNumber": 91,
+      "sourceFile": "IMG_20210206_095853_00_091.jpg",
+      "thumbnail": "/pano-additional/p091-thumb.jpg"
+    },
+    {
+      "id": "p093",
+      "room": "bedroom",
+      "label": "침실 반대편",
+      "position": [
+        -3.8,
+        1.5,
+        -1.1
+      ],
+      "imageYawDeg": -130,
+      "neighbors": [
+        "p074",
+        "bedroom"
+      ],
+      "hotspots": [
+        {
+          "to": "p074",
+          "yawDeg": 43.2,
+          "pitchDeg": -30
+        },
+        {
+          "to": "bedroom",
+          "yawDeg": 36.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p093.jpg",
+      "startYawDeg": -130,
+      "captureNumber": 93,
+      "sourceFile": "IMG_20210206_095917_00_093.jpg",
+      "thumbnail": "/pano-additional/p093-thumb.jpg"
+    },
+    {
+      "id": "p094",
+      "room": "bedroom",
+      "label": "자쿠지 옆 통로",
+      "position": [
+        -5.8,
+        1.5,
+        -3.2
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "p077",
+        "p075"
+      ],
+      "hotspots": [
+        {
+          "to": "p077",
+          "yawDeg": 93.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p075",
+          "yawDeg": -122.4,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p094.jpg",
+      "startYawDeg": 50,
+      "captureNumber": 94,
+      "sourceFile": "IMG_20210206_095932_00_094.jpg",
+      "thumbnail": "/pano-additional/p094-thumb.jpg"
+    },
+    {
+      "id": "p095",
+      "room": "bath",
+      "label": "욕실 안쪽",
+      "position": [
+        -7.4,
+        1.5,
+        -3.4
+      ],
+      "imageYawDeg": 50,
+      "neighbors": [
+        "p076"
+      ],
+      "hotspots": [
+        {
+          "to": "p076",
+          "yawDeg": 82.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p095.jpg",
+      "startYawDeg": 50,
+      "captureNumber": 95,
+      "sourceFile": "IMG_20210206_095946_00_095.jpg",
+      "thumbnail": "/pano-additional/p095-thumb.jpg"
+    },
+    {
+      "id": "p096",
+      "room": "yard",
+      "label": "거실 앞 마당",
+      "position": [
+        -0.6,
+        1.5,
+        -0.4
+      ],
+      "imageYawDeg": 180,
+      "neighbors": [
+        "p097",
+        "p071"
+      ],
+      "hotspots": [
+        {
+          "to": "p097",
+          "yawDeg": -21.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p071",
+          "yawDeg": 162.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p096.jpg",
+      "startYawDeg": 180,
+      "captureNumber": 96,
+      "sourceFile": "IMG_20210206_100113_00_096.jpg",
+      "thumbnail": "/pano-additional/p096-thumb.jpg"
+    },
+    {
+      "id": "p097",
+      "room": "yard",
+      "label": "마당 건너편 1",
+      "position": [
+        0.5,
+        1.5,
+        -2.4
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p098",
+        "p096"
+      ],
+      "hotspots": [
+        {
+          "to": "p098",
+          "yawDeg": -18.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p096",
+          "yawDeg": -129.6,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p097.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 97,
+      "sourceFile": "IMG_20210206_100127_00_097.jpg",
+      "thumbnail": "/pano-additional/p097-thumb.jpg"
+    },
+    {
+      "id": "p098",
+      "room": "yard",
+      "label": "마당 건너편 2",
+      "position": [
+        1.1,
+        1.5,
+        -2.6
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p099",
+        "p097",
+        "p078"
+      ],
+      "hotspots": [
+        {
+          "to": "p099",
+          "yawDeg": 111.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p097",
+          "yawDeg": -39.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p078",
+          "yawDeg": -136.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p098.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 98,
+      "sourceFile": "IMG_20210206_100142_00_098.jpg",
+      "thumbnail": "/pano-additional/p098-thumb.jpg"
+    },
+    {
+      "id": "p099",
+      "room": "yard",
+      "label": "마당 중앙 옆",
+      "position": [
+        0.9,
+        1.5,
+        -0.2
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "yard",
+        "p098"
+      ],
+      "hotspots": [
+        {
+          "to": "yard",
+          "yawDeg": 0.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p098",
+          "yawDeg": -36.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p099.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 99,
+      "sourceFile": "IMG_20210206_100154_00_099.jpg",
+      "thumbnail": "/pano-additional/p099-thumb.jpg"
+    },
+    {
+      "id": "p100",
+      "room": "yard",
+      "label": "마당 출입 통로",
+      "position": [
+        2.3,
+        1.5,
+        -2.9
+      ],
+      "imageYawDeg": 90,
+      "neighbors": [
+        "p078",
+        "p068"
+      ],
+      "hotspots": [
+        {
+          "to": "p078",
+          "yawDeg": -57.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p068",
+          "yawDeg": -3.6,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p100.jpg",
+      "startYawDeg": 90,
+      "captureNumber": 100,
+      "sourceFile": "IMG_20210206_100209_00_100.jpg",
+      "thumbnail": "/pano-additional/p100-thumb.jpg"
+    },
+    {
+      "id": "p101",
+      "room": "small",
+      "label": "작은 침실 욕실 문 앞",
+      "position": [
+        1.7,
+        1.5,
+        -5.1
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p104",
+        "p102"
+      ],
+      "hotspots": [
+        {
+          "to": "p104",
+          "yawDeg": 122.4,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p102",
+          "yawDeg": -10.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p101.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 101,
+      "sourceFile": "IMG_20210207_013356_00_101.jpg",
+      "thumbnail": "/pano-additional/p101-thumb.jpg"
+    },
+    {
+      "id": "p102",
+      "room": "small",
+      "label": "작은 침실 욕실 옆",
+      "position": [
+        1.5,
+        1.5,
+        -5.3
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p101",
+        "p103"
+      ],
+      "hotspots": [
+        {
+          "to": "p101",
+          "yawDeg": 129.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p103",
+          "yawDeg": -10.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p102.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 102,
+      "sourceFile": "IMG_20210207_013459_00_102.jpg",
+      "thumbnail": "/pano-additional/p102-thumb.jpg"
+    },
+    {
+      "id": "p103",
+      "room": "small",
+      "label": "작은 침실 욕실 쪽",
+      "position": [
+        1.7,
+        1.5,
+        -5.6
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p102",
+        "p106"
+      ],
+      "hotspots": [
+        {
+          "to": "p102",
+          "yawDeg": -64.8,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p106",
+          "yawDeg": 64.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p103.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 103,
+      "sourceFile": "IMG_20210207_013549_00_103.jpg",
+      "thumbnail": "/pano-additional/p103-thumb.jpg"
+    },
+    {
+      "id": "p104",
+      "room": "small",
+      "label": "작은 침실 현관 쪽",
+      "position": [
+        2,
+        1.5,
+        -5.1
+      ],
+      "imageYawDeg": 0,
+      "neighbors": [
+        "p080",
+        "p101"
+      ],
+      "hotspots": [
+        {
+          "to": "p080",
+          "yawDeg": 129.6,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p101",
+          "yawDeg": -64.8,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p104.jpg",
+      "startYawDeg": 0,
+      "captureNumber": 104,
+      "sourceFile": "IMG_20210207_013635_00_104.jpg",
+      "thumbnail": "/pano-additional/p104-thumb.jpg"
+    },
+    {
+      "id": "p105",
+      "room": "small",
+      "label": "작은 침실 창가 · 두 번째 촬영",
+      "position": [
+        3.2,
+        1.5,
+        -6.1
+      ],
+      "imageYawDeg": 90,
+      "neighbors": [
+        "p106",
+        "p085"
+      ],
+      "hotspots": [
+        {
+          "to": "p106",
+          "yawDeg": 18.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p085",
+          "yawDeg": 7.2,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p105.jpg",
+      "startYawDeg": 90,
+      "captureNumber": 105,
+      "sourceFile": "IMG_20210207_013712_00_105.jpg",
+      "thumbnail": "/pano-additional/p105-thumb.jpg"
+    },
+    {
+      "id": "p106",
+      "room": "small",
+      "label": "작은 침실 침대 · 두 번째 촬영",
+      "position": [
+        3.6,
+        1.5,
+        -5.5
+      ],
+      "imageYawDeg": 90,
+      "neighbors": [
+        "p103",
+        "p105"
+      ],
+      "hotspots": [
+        {
+          "to": "p103",
+          "yawDeg": -54.0,
+          "pitchDeg": -30
+        },
+        {
+          "to": "p105",
+          "yawDeg": 90.0,
+          "pitchDeg": -30
+        }
+      ],
+      "pano": "/pano-additional/p106.jpg",
+      "startYawDeg": 90,
+      "captureNumber": 106,
+      "sourceFile": "IMG_20210207_013745_00_106.jpg",
+      "thumbnail": "/pano-additional/p106-thumb.jpg"
+    }
+  ],
+  "captureBrowser": true
+}

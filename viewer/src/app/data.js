@@ -41,6 +41,11 @@ export async function loadNav(id, listing, file = null) {
   return prepareNav(nav, base);
 }
 
+// Camera captures can have their own graph without changing the 3DGS alignment.
+export function loadPanoNav(id, listing, file = null) {
+  return loadNav(id, listing, file || listing?.explore?.panoNav);
+}
+
 export async function loadTasks(id, listing) {
   const t = await maybe(spaceBase(id) + (listing?.explore?.tasks || "tasks.json"));
   return t?.tasks || [];

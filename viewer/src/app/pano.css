@@ -4,13 +4,13 @@ html, body { margin: 0; height: 100%; background: #0c0c0d; color: #f5f3ef; overf
 #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
 #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
 
-.pv-label {
-  position: absolute; left: 0; top: 0; pointer-events: auto; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap;
-  padding: 6px 8px 6px 12px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.94); color: #1f1d1a;
-  font: 650 13px/1 "Pretendard Variable", Pretendard, system-ui, sans-serif; letter-spacing: -0.01em; cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 8px 20px -8px rgba(0, 0, 0, 0.5);
-}
-.pv-label .ic { width: 15px; height: 15px; }
+.pv-hotspot { position: absolute; left: 0; top: 0; padding: 0; border: 0; background: none; color: white; pointer-events: auto; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; touch-action: manipulation; }
+.pv-hotspot[hidden] { display: none; }
+.pv-hotspot-circle { width: 56px; height: 56px; display: grid; place-items: center; border: 2px solid white; border-radius: 50%; background: rgba(20, 25, 30, .45); box-shadow: 0 3px 16px #0005; backdrop-filter: blur(3px); transition: background .15s, scale .15s; }
+.pv-hotspot svg { width: 31px; height: 31px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.pv-hotspot-name { padding: 5px 9px; border-radius: 8px; background: #17212bcc; font: 600 12px/1.2 system-ui, sans-serif; white-space: nowrap; }
+.pv-hotspot:hover .pv-hotspot-circle, .pv-hotspot.hover .pv-hotspot-circle, .pv-hotspot:focus-visible .pv-hotspot-circle { background: #2f7cf6; scale: 1.12; }
+.pv-hotspot:focus-visible { outline: 2px solid white; outline-offset: 6px; border-radius: 28px; }
 
 #loader { position: absolute; inset: 0; display: grid; place-items: center; background: #0c0c0d; z-index: 20; transition: opacity 0.5s cubic-bezier(0.32, 0.72, 0, 1); }
 #loader.done { opacity: 0; pointer-events: none; }

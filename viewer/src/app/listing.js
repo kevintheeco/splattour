@@ -2,7 +2,7 @@
 // two ways to explore, description, 사진 투어 (room-grouped photos), rooms,
 // amenities, location, rules, and a sticky bar with the two entry buttons:
 // 360° 시점 탐색 · 3DGS 자유 시점 탐색. Everything comes from listing.json.
-import { loadListing, loadNav, findScene, esc, HOME } from "./data.js";
+import { loadListing, loadPanoNav, findScene, esc, HOME } from "./data.js";
 import { icon } from "./icons.js";
 import { reveal, favs, toast, pager } from "./ui.js";
 
@@ -131,7 +131,7 @@ async function main() {
 
 // The two entry buttons (and the explore section states)
 async function entries(l) {
-  const [nav, scene] = await Promise.all([loadNav(l.id, l).catch(() => null), findScene(l.explore?.scene)]);
+  const [nav, scene] = await Promise.all([loadPanoNav(l.id, l).catch(() => null), findScene(l.explore?.scene)]);
   const goPano = $("#goPano"), goSplat = $("#goSplat");
   const set = (a, st, href, sub, stateText, cls) => {
     a.classList.toggle("off", !href);
