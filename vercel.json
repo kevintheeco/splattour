@@ -1,3 +1,12 @@
 {
-  "git": { "deploymentEnabled": false }
+  "installCommand": "npm ci --prefix viewer",
+  "buildCommand": "cd viewer && VITE_STORAGE_URL=https://media.3dgstour.com npm run build && mv dist/index.html dist/tour.html && mv dist/home.html dist/index.html",
+  "outputDirectory": "viewer/dist",
+  "ignoreCommand": "echo \"$VERCEL_PROJECT_PRODUCTION_URL\" | grep -q 3dgstour.com",
+  "headers": [
+    {
+      "source": "/assets/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ]
 }

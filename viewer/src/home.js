@@ -28,6 +28,8 @@ async function init() {
     const r = await fetch("/api/web/config");
     if (r.ok) cfg = await r.json();
   } catch {}
+  // git-built deploys (no upload API / keys) still list the published scenes
+  cfg.storage ||= import.meta.env.VITE_STORAGE_URL || "";
   $("#uploadNote").textContent = cfg.uploads ? "" : "업로드 저장소를 연결하는 중이에요. 곧 열려요.";
   const pw = store.get("st-pw");
   if (pw) $("#pw").value = pw;
