@@ -44,6 +44,8 @@ export class LookControls extends EventTarget {
 
   _bind() {
     const el = this.dom;
+    // Keep one-finger look and two-finger zoom in the viewer on touch browsers.
+    el.style.touchAction = "none";
     el.addEventListener("pointerdown", (e) => {
       if (!this.enabled) return;
       el.setPointerCapture(e.pointerId);
@@ -54,6 +56,8 @@ export class LookControls extends EventTarget {
         this.velYaw = this.velPitch = 0;
         this.dispatchEvent(new Event("interact"));
       } else if (this.pointers.size === 2) {
+        this.moved = Math.max(this.moved, 7); // a pinch must never become a tap-to-walk
+        this.velYaw = this.velPitch = 0;
         this.pinchStart = this._pinchDist();
         this.pinchFov = this.targetFov;
       }
@@ -84,7 +88,22 @@ export class LookControls extends EventTarget {
       if (this.pointers.size === 0) this.dragging = false;
     };
     el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
+    const cancel = (e) => {
+      up(e);
+      this.velYaw = this.velPitch = 0;
+      this.moved = Math.max(this.moved, 7);
+    };
+    el.addEventListener("pointercancel", cancel);
+    el.addEventListener("lostpointercapture", (e) => {
+      if (this.pointers.has(e.pointerId)) cancel(e);
+    });
+    const reset = () => {
+      this.pointers.clear();
+      this.dragging = false;
+      this.velYaw = this.velPitch = 0;
+    };
+    window.addEventListener("blur", reset);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) reset(); });
     el.addEventListener(
       "wheel",
       (e) => {

@@ -13,6 +13,7 @@ import { TourAudio } from "./audio.js";
 import { Coach } from "./coach.js";
 import { Photos } from "./photos.js";
 import { Cinema } from "./cinema.js";
+import { Joystick } from "./app/joystick.js";
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -444,11 +445,17 @@ async function main() {
 
   // ---------- modes ----------
   let mode = params.get("mode") === "pano" && !app ? "pano" : "splat";
+  const joystick = matchMedia("(pointer: coarse)").matches && walkMode && params.get("joystick") !== "0"
+    ? new Joystick({ log: (event, data) => window.__study?.log(event, data) }) : null;
+  const syncJoystick = () => joystick?.setVisible(mode === "splat" && walkMode);
+  syncJoystick();
+  if (app) app.joystick = joystick;
   let freeRoam = false;
   const modeBtn = document.querySelector('[data-act="mode"]');
   async function setMode(m) {
     if (sceneFrozen || (app?.sceneLinksEnabled && m !== "splat")) return;
     mode = m;
+    syncJoystick();
     modeBtn.querySelector(".ico").textContent = m === "splat" ? "3D" : "360";
     modeBtn.classList.toggle("on", m === "pano");
     if (m === "pano") {
@@ -1019,7 +1026,7 @@ async function main() {
     nav.stop();
     clearTimeout(clickTimer);
     held.clear(); keyVel.set(0, 0, 0); keyWalking = false;
-    app?.joystick?.reset();
+    joystick?.reset();
     look.keys.clear();
     audio.pause();
     if (autoTour) stopAuto();
@@ -1125,7 +1132,7 @@ async function main() {
     const side = (held.has("KeyD") ? 1 : 0) - (held.has("KeyA") ? 1 : 0);
     const want = new THREE.Vector3();
     // touch phones (app mode): the joystick gives a direction and a push 0..1
-    const joy = app?.joystick?.value();
+    const joy = joystick?.value();
     const joyOn = !!joy && (joy.x !== 0 || joy.y !== 0);
     if (fwd || side) {
       const sy = Math.sin(look.yaw), cy = Math.cos(look.yaw);
@@ -1171,7 +1178,7 @@ async function main() {
     else if (walkMap.canStep(g, p.x, p.z, nx, p.z)) { p.x = nx; keyVel.z = 0; }
     else if (walkMap.canStep(g, p.x, p.z, p.x, nz)) { p.z = nz; keyVel.x = 0; }
     else keyVel.set(0, 0, 0);
-    app?.joystick?.addDistance(Math.hypot(p.x - px0, p.z - pz0));
+    joystick?.addDistance(Math.hypot(p.x - px0, p.z - pz0));
     const hk = walkMap.heightAt(g, p.x, p.z);
     p.y += ((Number.isFinite(hk) ? hk : g.fy) + tour.eyeHeight - p.y) * (1 - Math.exp(-dt * 6));
   }
@@ -1324,7 +1331,7 @@ async function main() {
 
   // Debug / automation hooks (used by the evaluation scripts).
   const toggleCinema = () => { if (!cinema) return; if (cinema.active) cinema.stop(); else cinema.start().then((ok) => ok && toast("자동 둘러보기 · 화면을 누르면 멈춰요", 3000)); };
-  window.splattour = { sceneName: activeSceneName, toggleCinema, walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat), progress: () => (streaming ? { full: streaming.full && { ...streaming.full }, shown: streaming.shown || 0, pill: $("#streamPill")?.textContent || "", pillOn: !!$("#streamPill")?.classList.contains("show") } : null) };
+  window.splattour = { sceneName: activeSceneName, joystick, toggleCinema, walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat), progress: () => (streaming ? { full: streaming.full && { ...streaming.full }, shown: streaming.shown || 0, pill: $("#streamPill")?.textContent || "", pillOn: !!$("#streamPill")?.classList.contains("show") } : null) };
 }
 
 main().catch((err) => {
