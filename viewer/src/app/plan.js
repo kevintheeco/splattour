@@ -16,8 +16,21 @@ function loadImage(src) {
 
 export class PlanData {
   // nav: prepared nav.json (data.js); base: /spaces/<id>/
-  static async load(nav, base) {
+  static async load(nav, base, { condition } = {}) {
     const p = new PlanData(nav);
+    if (nav.spatialPlan && (condition === "splat" || condition === "pano")) {
+      try {
+        const r = await fetch(base + nav.spatialPlan, { cache: "no-cache" });
+        if (!r.ok) throw new Error("no spatial plan");
+        const j = await r.json();
+        if (j.scene !== nav.scene) throw new Error("spatial plan coordinate frame mismatch");
+        p._fromIllustration(j, await loadImage(base + j.image));
+        p.marker = j.marker;
+        return p;
+      } catch (error) {
+        console.warn("[plan] Spatial map unavailable; using the existing plan", error);
+      }
+    }
     try {
       const r = await fetch(base + "plan.json", { cache: "no-cache" });
       if (!r.ok || !(r.headers.get("content-type") || "").includes("json")) throw new Error("no plan");
@@ -31,6 +44,39 @@ export class PlanData {
   }
 
   constructor(nav) { this.nav = nav; }
+
+  _fromIllustration(j, img) {
+    // Monotone, piecewise calibration preserves continuous walking across
+    // room boundaries; it never snaps the marker to the nearest capture node.
+    const axis = (knots) => {
+      if (!Array.isArray(knots) || knots.length < 2 || knots.some((p, i) =>
+        p.length !== 2 || !p.every(Number.isFinite) ||
+        (i > 0 && (p[0] <= knots[i - 1][0] || p[1] <= knots[i - 1][1])))) {
+        throw new Error("Invalid spatial map calibration");
+      }
+      return (v) => {
+        let i = 0;
+        while (i < knots.length - 2 && v > knots[i + 1][0]) i++;
+        const [a, b] = knots[i], [c, d] = knots[i + 1];
+        return b + (v - a) / (c - a) * (d - b);
+      };
+    };
+    const u = axis(j.axes.u), w = axis(j.axes.w);
+    if (!Number.isFinite(j.rotation)) throw new Error("Invalid spatial map rotation");
+    const c = Math.cos(j.rotation), s = Math.sin(j.rotation);
+    this.toImg = (x, z) => [u(x * c + z * s), w(-x * s + z * c)];
+    this.illustrated = true;
+    // Calibration uses a declared reference size, independent of the PNG's
+    // native/export resolution (the uploaded original can be larger).
+    this.W = j.referenceSize?.[0] || img.width;
+    this.H = j.referenceSize?.[1] || img.height;
+    this.image = img;
+    this.rot = j.rotation;
+    this.compactBounds = j.compactBounds;
+    // The supplied artwork already contains room labels and colours.
+    this.labels = new Map();
+    this.highlight = new Map();
+  }
 
   _fromBaked(j, img, idx) {
     this.baked = true;
@@ -109,7 +155,14 @@ export class PlanData {
   }
 
   // Screen angle (canvas, y down) of a world yaw on the plan.
-  screenAngle(yaw) {
+  screenAngle(yaw, pose) {
+    if (this.illustrated && pose) {
+      // Apply the same local warp to the heading as to the live position.
+      const e = 0.01, dx = -Math.sin(yaw) * e, dz = -Math.cos(yaw) * e;
+      const a = this.toImg(pose.x - dx, pose.z - dz);
+      const b = this.toImg(pose.x + dx, pose.z + dz);
+      return Math.atan2(b[1] - a[1], b[0] - a[0]);
+    }
     const dx = -Math.sin(yaw), dz = -Math.cos(yaw), c = Math.cos(this.rot), s = Math.sin(this.rot);
     return Math.atan2(-dx * s + dz * c, dx * c + dz * s);
   }
@@ -119,11 +172,35 @@ export class PlanData {
     const { scale, ox, oy } = view;
     ctx.save();
     ctx.setTransform(scale, 0, 0, scale, ox, oy);
+    if (compact && this.compactBounds) {
+      ctx.beginPath();
+      ctx.rect(...this.compactBounds);
+      ctx.clip();
+    }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(this.image, 0, 0);
+    ctx.drawImage(this.image, 0, 0, this.W, this.H);
     const hl = st.room && this.highlight.get(st.room);
     if (hl) ctx.drawImage(hl, 0, 0);
+    if (this.nav.showMapRoutes) {
+      ctx.strokeStyle = "rgba(47,124,246,0.35)";
+      ctx.lineWidth = 1.5 * dpr / scale;
+      ctx.beginPath();
+      for (const n of this.nav.nodes) for (const id of n.neighbors) {
+        if (n.id > id) continue;
+        const to = this.nav.byId.get(id);
+        if (!to) continue;
+        ctx.moveTo(...this.toImg(n.position[0], n.position[2]));
+        ctx.lineTo(...this.toImg(to.position[0], to.position[2]));
+      }
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      for (const n of this.nav.nodes) {
+        const [x, y] = this.toImg(n.position[0], n.position[2]);
+        ctx.beginPath(); ctx.arc(x, y, 2.5 * dpr / scale, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      }
+    }
     ctx.restore();
 
     // room names (constant size on screen)
@@ -150,7 +227,41 @@ export class PlanData {
     if (st.pose) {
       const [ix, iy] = this.toImg(st.pose.x, st.pose.z);
       const px = ox + ix * scale, py = oy + iy * scale;
-      const a = this.screenAngle(st.pose.yaw), half = (st.pose.hfov || 1.2) / 2;
+      const a = this.screenAngle(st.pose.yaw, st.pose), half = (st.pose.hfov || 1.2) / 2;
+      if (this.marker) {
+        // Reproduce the reference as canvas geometry without its opaque white
+        // background. Its dot is the pivot; the reference cone points up.
+        const { compactScale, fullScale } = this.marker;
+        const k = (compact ? compactScale : fullScale) * dpr;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(a + Math.PI / 2);
+        ctx.scale(k, k);
+        ctx.fillStyle = "rgba(220,220,220,0.65)";
+        ctx.beginPath();
+        ctx.arc(0, 0, 48, 0, Math.PI * 2);
+        ctx.fill();
+        const cone = ctx.createLinearGradient(0, 0, 0, -138);
+        cone.addColorStop(0, "rgba(29,105,255,0.8)");
+        cone.addColorStop(1, "rgba(29,105,255,0)");
+        ctx.fillStyle = cone;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-92, -138);
+        ctx.lineTo(92, -138);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(0, 0, 27, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#1d69ff";
+        ctx.beginPath();
+        ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+      }
       const R = (compact ? 40 : 72) * dpr;
       const gr = ctx.createRadialGradient(px, py, 0, px, py, R);
       gr.addColorStop(0, "rgba(47,124,246,0.55)");
@@ -215,9 +326,10 @@ export class PlanCanvas {
   _fit() {
     const d = this.data, W = this.c.width, H = this.c.height;
     const m = (this.compact ? 10 : 22) * this.dpr;
-    const base = Math.min((W - 2 * m) / d.W, (H - 2 * m) / d.H);
+    const [x, y, width, height] = (this.compact && d.compactBounds) || [0, 0, d.W, d.H];
+    const base = Math.min((W - 2 * m) / width, (H - 2 * m) / height);
     const scale = base * this.zoom;
-    return { scale, ox: (W - d.W * scale) / 2 + this.pan[0], oy: (H - d.H * scale) / 2 + this.pan[1] };
+    return { scale, ox: (W - width * scale) / 2 - x * scale + this.pan[0], oy: (H - height * scale) / 2 - y * scale + this.pan[1] };
   }
 
   draw(st) {
@@ -231,13 +343,13 @@ export class PlanCanvas {
       const cx = this.c.width / 2, cy = this.c.height / 2;
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(-Math.PI / 2 - this.data.screenAngle(st.pose.yaw));
+      ctx.rotate(-Math.PI / 2 - this.data.screenAngle(st.pose.yaw, st.pose));
       ctx.translate(-cx, -cy);
       view = { ...view, ox: cx - ix * view.scale, oy: cy - iy * view.scale };
       this.data.draw(ctx, view, st, { dpr: this.dpr, compact: this.compact });
       ctx.restore();
     } else this.data.draw(ctx, view, st, { dpr: this.dpr, compact: this.compact });
-    this._north(ctx);
+    if (!this.data.illustrated) this._north(ctx);
   }
 
   // small "N" badge: up on the plan

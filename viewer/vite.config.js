@@ -44,6 +44,6 @@ export default defineConfig({
   // /api goes to the studio server (edit mode saves tours through it)
   server: { port: 5190, host: true, proxy: { "/api": "http://localhost:5200" } },
   preview: { port: 5191, host: true },
-  build: { target: "es2022", chunkSizeWarningLimit: 4000, rollupOptions: { input: { tour: "index.html", home: "home.html", manual: "manual.html", upload: "upload.html", listing: "listing.html", pano: "pano.html", study: "study.html" } } },
+  build: { target: "es2022", chunkSizeWarningLimit: 4000, rollupOptions: { input: { tour: "index.html", home: "home.html", manual: "manual.html", upload: "upload.html", listing: "listing.html", pano: "pano.html", mapEditor: "map-editor.html", panoAdditional: "pano-additional.html", study: "study.html" } } },
   optimizeDeps: { exclude: ["@sparkjsdev/spark"] },
 });

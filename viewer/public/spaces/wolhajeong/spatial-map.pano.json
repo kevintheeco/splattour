@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "scene": "wolhajeong-pano-map",
+  "image": "spatial-map.png",
+  "referenceSize": [
+    1952,
+    1277
+  ],
+  "rotation": 0,
+  "compactBounds": [
+    480,
+    230,
+    1410,
+    900
+  ],
+  "axes": {
+    "u": [
+      [
+        -5,
+        500
+      ],
+      [
+        9,
+        1900
+      ]
+    ],
+    "w": [
+      [
+        -5,
+        240
+      ],
+      [
+        4,
+        1140
+      ]
+    ]
+  },
+  "calibration": {
+    "approximate": true,
+    "method": "Panorama-only positions on supplied floor plan; 100 illustration pixels per virtual metre."
+  }
+}
