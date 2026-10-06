@@ -2,6 +2,7 @@
  "version": 1,
  "about": "촬영 지점 = 360° 시점 탐색의 핫스팟 그래프이자 두 조건 공통의 공간 명칭·탐색 범위·평면도 기준. 좌표는 3DGS 장면 좌표(미터, y 위, 시선 -Z가 yaw 0). imageYawDeg = 파노라마 가운데 열이 바라보는 방향(도, 왼쪽으로 돌면 +).",
  "scene": "wolhajeong360-hq",
+ "spatialPlan": "spatial-map.json",
  "generated": {
   "by": "viewer/scripts/space-from-scene.mjs",
   "at": "2026-09-26T03:05:42.002Z",
@@ -40,7 +41,7 @@
   {
    "id": "sarang",
    "name": "별채 사랑방",
-   "scene": "wolhajeong360-sarang",
+   "scene": "wolhajeong360-sarang3",
    "floorY": 0.69,
    "sceneTransform": {
     "scale": 0.62874,
@@ -55,7 +56,7 @@
      0.6941,
      -2.5207
     ],
-    "about": "wolhajeong360-sarang 모델 좌표 -> 이 공간(wolhajeong360-hq) 좌표. 실제 사랑방 문을 앞마당 쪽·방 안쪽에서 잰 문틀(폭·높이 1% 안, 모서리 5 cm 안)로 풀었다. 사랑방 모델은 약 16° 기울고 1.55배 크게 복원되어 있었다(scenes 파일은 그대로 두고 여기서 바로잡는다)."
+    "about": "wolhajeong360-sarang 모델 좌표 -> 이 공간(wolhajeong360-hq) 좌표. 실제 사랑방 문을 앞마당 쪽·방 안쪽에서 잰 문틀(폭·높이 1% 안, 모서리 5 cm 안)로 풀었다. 사랑방 모델은 약 16° 기울고 1.55배 크게 복원되어 있었다(scenes 파일은 그대로 두고 여기서 바로잡는다). / 2026-10-02 임시: v3(sarang3)로 교체 — v1·v3 정렬 프레임이 거의 같아(스케일 0.3846 vs 0.3881) 기존 변환 재사용, 눈검사로 확인할 것"
    },
    "region": {
     "center": [
@@ -227,7 +228,7 @@
   },
   {
    "id": "n9",
-   "room": "yard",
+   "room": "living",
    "position": [
     -5.5539,
     2.15,
@@ -480,5 +481,180 @@
    "textureBack": "doors/sarang-back.jpg",
    "note": "실제 문: 툇마루 위의 유리 격자 쌍여닫이(亞자 살). 위치·폭·높이는 3DGS에서 문틀 모서리를 잰 값, 겉·속 그림은 두 모델에서 정면으로 렌더해 펴 낸 것. 안쪽은 방석 의자(데이베드)가 왼쪽 문짝 아래를 가려 그 부분은 오른쪽 문짝을 뒤집어 채움. 여는 방향은 안쪽 데이베드 때문에 바깥(앞마당 쪽)으로 추정."
   }
- ]
+ ],
+ "sceneLinks": {
+  "version": 1,
+  "preloadDistance": 2.5,
+  "note": "Each model stays in its own tour coordinates; mapTransform is used ONLY for the shared map. Entrance and map calibration are approximate visual matches. Yard, sarang and warm-600 anchae switch exclusively via floor arrows.",
+  "spaces": [
+   {
+    "id": "main",
+    "name": "앞마당",
+    "scene": "wolhajeong360-hq",
+    "rooms": [
+     "yard"
+    ]
+   },
+   {
+    "id": "sarang",
+    "name": "별채 사랑방",
+    "scene": "wolhajeong360-sarang3",
+    "rooms": [
+     "sarang"
+    ],
+    "mapTransform": {
+     "scale": 0.62874,
+     "quaternion": [
+      0.047877,
+      0.20195,
+      -0.134101,
+      0.96899
+     ],
+     "position": [
+      -0.1002,
+      0.6941,
+      -2.5207
+     ]
+    }
+   },
+   {
+    "id": "anchae",
+    "name": "안채",
+    "scene": "wolhajeong-anchae-warm-600",
+    "rooms": [
+     "living",
+     "dark"
+    ],
+    "mapTransform": {
+     "scale": 0.75,
+     "yawDeg": 180,
+     "position": [
+      -5.55,
+      1.0625,
+      0.8
+     ]
+    },
+    "calibration": {
+     "approximate": true,
+     "note": "Map-only alignment: living-room shelf/glass-door direction matched visually to HQ. Door placement and scale are approximate; not a surveyed registration. Original model/camera coordinates remain unchanged."
+    }
+   }
+  ],
+  "links": [
+   {
+    "id": "yard-sarang",
+    "a": {
+     "space": "main",
+     "marker": [
+      -2.4,
+      0.025,
+      -2.12
+     ],
+     "position": [
+      -2.7211,
+      1.45,
+      -1.3694
+     ],
+     "yaw": 1.5707963267948966,
+     "pitch": -0.12,
+     "radius": 3.5,
+     "barrier": {
+      "center": [
+       -1.685,
+       -2.16
+      ],
+      "normal": [
+       0.998,
+       0.063
+      ],
+      "halfWidth": 2.5
+     }
+    },
+    "b": {
+     "space": "sarang",
+     "marker": [
+      -1.839079478928878,
+      0.025,
+      0.2087856172126003
+     ],
+     "position": [
+      -1.3784,
+      1.6,
+      0.5932
+     ],
+     "yaw": -1.1643995190708119,
+     "pitch": -0.12,
+     "radius": 3.5,
+     "barrier": {
+      "center": [
+       -3.009416379496373,
+       -0.7678030042971256
+      ],
+      "normal": [
+       -0.7677991315481301,
+       -0.6406906379789994
+      ],
+      "halfWidth": 2.5
+     }
+    }
+   },
+   {
+    "id": "yard-anchae",
+    "a": {
+     "space": "main",
+     "marker": [
+      -5.9657,
+      0.025,
+      -1.1
+     ],
+     "position": [
+      -5.9657,
+      1.45,
+      -1.7
+     ],
+     "yaw": 0,
+     "pitch": -0.12,
+     "radius": 2.8,
+     "barrier": {
+      "center": [
+       -5.8,
+       -0.35
+      ],
+      "normal": [
+       0,
+       1
+      ],
+      "halfWidth": 4
+     }
+    },
+    "b": {
+     "space": "anchae",
+     "marker": [
+      -0.3,
+      0.025,
+      0.45
+     ],
+     "position": [
+      -0.3,
+      1.45,
+      -0.35
+     ],
+     "yaw": 0.0431,
+     "pitch": -0.12,
+     "radius": 2.8,
+     "barrier": {
+      "center": [
+       -0.3,
+       0.8
+      ],
+      "normal": [
+       0,
+       1
+      ],
+      "halfWidth": 2
+     }
+    }
+   }
+  ]
+ }
 }

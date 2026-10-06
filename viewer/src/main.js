@@ -78,7 +78,9 @@ function applyTransform(obj, t) {
 }
 
 async function main() {
-  const tour = await loadTour(baseUrl);
+  let tour = await loadTour(baseUrl);
+  let activeSceneName = sceneName;
+  let sceneFrozen = false;
   // Inside the listing app (&app=1&space=<id>): the chrome shared with the 360° viewer, see app/appmode.js
   const app = params.get("app") === "1" ? await import("./app/appmode.js").then((m) => m.prepare({ params, tour })) : null;
   document.title = `${tour.title} · SplatTour`;
@@ -129,7 +131,7 @@ async function main() {
   // Desktop, no ?quality=: the streamed tree gives the first view in seconds,
   // then the full file loads behind it and replaces it (sharper far detail;
   // the tree's pool can't hold every fine page). Phones stay on the tree (memory).
-  const progressive = lodMode && !tour.phone && !params.get("quality") && !!tour.fallbackUrl;
+  const progressive = !app?.sceneLinksEnabled && lodMode && !tour.phone && !params.get("quality") && !!tour.fallbackUrl;
   let viewerReady = null;
   const ready = new Promise((r) => { viewerReady = r; });
   let splat = null;
@@ -242,7 +244,7 @@ async function main() {
   // Walking (default): eye height, walking pace, around furniture.
   // ?move=fly restores the earlier flight between viewpoints (study condition).
   const walkMode = params.get("move") !== "fly";
-  const walkMap = walkMode ? new WalkMap(occ, tour) : null;
+  let walkMap = walkMode ? new WalkMap(occ, tour) : null;
   if (+params.get("walk") > 0) nav.walkSpeed = +params.get("walk");
   const floorAt = (p) => tour.nearestNode(p).floorY;
   // Waypoints from `from` to `to`: start and end keep their heights (viewpoints
@@ -283,8 +285,8 @@ async function main() {
   const pano = new PanoMode({ renderer, spark, scene, splat, hideObjects: [hotspots.group, hotspots.cursor] });
 
   // ---------- lighting & sound ----------
-  const lighting = new Lighting(splat, tour.data.lights || []);
-  const audio = new TourAudio({ tour, camera });
+  let lighting = new Lighting(splat, tour.data.lights || []);
+  let audio = new TourAudio({ tour, camera });
   setupMood();
 
   function setupMood() {
@@ -310,7 +312,15 @@ async function main() {
       syncSliders();
       document.querySelectorAll("#presets button").forEach((x) => x.classList.toggle("on", x === b));
     });
+    rebuildLights();
+    $("#musicPlay").addEventListener("click", toggleMusic);
+    $("#sVolume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
+  }
+
+  function rebuildLights() {
+    $("#lamps").replaceChildren();
     const list = $("#lightList");
+    list.replaceChildren();
     $("#lightsHead").hidden = lighting.lights.length === 0;
     for (const l of lighting.lights) {
       const row = document.createElement("div");
@@ -332,8 +342,7 @@ async function main() {
       $("#lamps").appendChild(lamp);
       l.lampEl = lamp;
     }
-    $("#musicPlay").addEventListener("click", toggleMusic);
-    $("#sVolume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
+
   }
 
   function setLamp(l, on) {
@@ -374,6 +383,7 @@ async function main() {
   // ---------- thumbnails (rendered from the splat when not supplied) ----------
   const thumbs = new Map();
   async function renderThumbs() {
+    if (app?.sceneLinksEnabled) return;
     const tw = 312;
     const th = 184;
     const off = document.createElement("canvas");
@@ -437,6 +447,7 @@ async function main() {
   let freeRoam = false;
   const modeBtn = document.querySelector('[data-act="mode"]');
   async function setMode(m) {
+    if (sceneFrozen || (app?.sceneLinksEnabled && m !== "splat")) return;
     mode = m;
     modeBtn.querySelector(".ico").textContent = m === "splat" ? "3D" : "360";
     modeBtn.classList.toggle("on", m === "pano");
@@ -452,6 +463,7 @@ async function main() {
   }
 
   async function go(node) {
+    if (sceneFrozen) return;
     if (!node || node === nav.current) return;
     hideHint();
     if (mode === "pano") {
@@ -501,10 +513,11 @@ async function main() {
     for (const [id, el] of thumbEls) el.classList.toggle("active", node && id === node.id);
     if (node) {
       const el = thumbEls.get(node.id);
-      el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
       hotspots.show(node);
       const u = new URL(location.href);
       u.searchParams.set("node", node.id);
+      if (app?.sceneLinksEnabled) u.searchParams.delete("pose");
       history.replaceState(null, "", u);
     }
   });
@@ -563,7 +576,7 @@ async function main() {
   canvas.addEventListener("pointerdown", () => canvas.classList.add("dragging"));
   canvas.addEventListener("pointerup", (e) => {
     canvas.classList.remove("dragging");
-    if (look.moved > 6 || e.button !== 0) return;
+    if (sceneFrozen || look.moved > 6 || e.button !== 0) return;
     ndc.set((e.clientX / canvas.clientWidth) * 2 - 1, -(e.clientY / canvas.clientHeight) * 2 + 1);
     if (mode === "pano") {
       const m = hotspots.pickMarker(ndc);
@@ -588,6 +601,7 @@ async function main() {
   // Double-click anywhere → walk there. On the floor: to that spot. On a wall
   // or an object: to standing distance in front of it, then look at it.
   function walkToClick(e) {
+    if (sceneFrozen) return;
     raycaster.setFromCamera(ndc, camera);
     const o = raycaster.ray.origin.clone(), dir = raycaster.ray.direction.clone();
     const dist = occ.march(o, dir, 25, 0.15);
@@ -603,7 +617,7 @@ async function main() {
     // Tapped into another room you can't walk into (behind a wall or a door the
     // reconstruction closed, e.g. 월하정 거실) that the tour links to: go there
     // the way the tour moves between separate parts, fading through black.
-    if (dist < 25) {
+    if (dist < 25 && !app?.sceneLinksEnabled) {
       // (the capture point near the tapped surface, or just behind it: a glass door)
       const behind = hitP.clone().addScaledVector(dir, 1.0);
       const here = tour.nearestNode(rig.position);
@@ -814,12 +828,12 @@ async function main() {
   const coach = new Coach($("#hint"), params);
   // User-study logging, loaded only with ?study=<participant> (see study.js)
   if (params.has("study")) {
-    import("./study.js").then((s) => { window.__study = s.start({ nav, look, rig, params, canvas, tour, getMode: () => mode }); }).catch((e) => console.warn("[study]", e));
+    import("./study.js").then((s) => { window.__study = s.start({ nav, look, rig, params, canvas, tour, getMode: () => mode, getPose: () => ({ ...(app?.sceneLinksEnabled ? app.mapPose(rig.position, look.yaw) : { x: rig.position.x, y: rig.position.y, z: rig.position.z, yaw: look.yaw }), scene: activeSceneName }) }); }).catch((e) => console.warn("[study]", e));
   }
   // Cinematic auto-camera along the walked path (cinema.js): tour page only,
   // never in the study or the listing app. ?cinema=1 starts it, C toggles.
   // (in the app too, from the ≡ menu, but never in the study)
-  const cinema = !params.has("study") ? new Cinema({ tour, rig, look, baseUrl }) : null;
+  const cinema = !app?.sceneLinksEnabled && !params.has("study") ? new Cinema({ tour, rig, look, baseUrl }) : null;
   if (cinema) {
     const startCinema = async () => {
       if (mode !== "splat") return;
@@ -841,7 +855,7 @@ async function main() {
   nav.addEventListener("depart", () => coach.did("move"));
   canvas.addEventListener("dblclick", () => coach.did("close"));
   canvas.addEventListener("wheel", () => coach.did("zoom"), { passive: true });
-  app?.start({ nav, look, rig, canvas, tour, scene, renderer, camera, occ, walkMap, splat, sceneName, loadScene: loadExtraScene }).catch((e) => console.warn("[app]", e));
+  app?.start({ nav, look, rig, canvas, tour, scene, renderer, camera, occ, walkMap, splat, sceneName, loadScene: loadExtraScene, loadIndependent, activateIndependent, waitIndependentFrame, freeze: freezeScene }).catch((e) => console.warn("[app]", e));
   viewerReady();
   if (progressive && streaming) upgradeToFull();
 
@@ -955,11 +969,122 @@ async function main() {
     return { name, tour: t2, splat: s, occ: o };
   }
 
+  // Space switching keeps one model attached to the renderer. Preloaded models
+  // remain detached, with their OWN tour, floor grid and lighting.
+  const independentContexts = new Map();
+  function rememberCurrent() {
+    if (!independentContexts.has(activeSceneName)) independentContexts.set(activeSceneName,
+      { name: activeSceneName, tour, splat, occ, walkMap, lighting, audio, streaming });
+  }
+  async function loadIndependent(definition) {
+    rememberCurrent();
+    if (independentContexts.has(definition.scene)) return independentContexts.get(definition.scene);
+    const base = new URL(`${cloudBase || ""}/scenes/${encodeURIComponent(definition.scene)}/`, location.href);
+    const nextTour = await loadTour(base);
+    // Full SPZ (or the phone's lightweight SPZ) gives a completely prepared,
+    // detached target. No unfinished LoD/full swap can resurrect an old scene.
+    const url = nextTour.splatMode === "lod"
+      ? nextTour.resolve(nextTour.phone && nextTour.data.splatMobile ? nextTour.data.splatMobile : nextTour.data.splat)
+      : nextTour.splatUrl;
+    let nextSplat;
+    try {
+      nextSplat = new SplatMesh({ url, raycastable: true, minRaycastOpacity: .2 });
+      const sh = params.has("maxsh") ? +params.get("maxsh") : nextTour.data.renderSettings?.maxSh;
+      if (sh != null && Number.isFinite(sh)) nextSplat.maxSh = Math.max(0, Math.min(3, sh));
+      applyTransform(nextSplat, nextTour.splatTransform);
+      await nextSplat.initialized;
+      nextSplat.updateMatrixWorld(true);
+      const nextOcc = new Occupancy(nextSplat, nextTour);
+      const context = { name: definition.scene, tour: nextTour, splat: nextSplat, occ: nextOcc,
+        walkMap: null, lighting: new Lighting(nextSplat, nextTour.data.lights || []), audio: new TourAudio({ tour: nextTour, camera }), streaming: null };
+      independentContexts.set(definition.scene, context);
+      return context;
+    } catch (error) { nextSplat?.dispose(); throw error; }
+  }
+
+  async function waitIndependentFrame(context) {
+    const deadline = performance.now() + 15000;
+    do {
+      if (renderer.getContext().isContextLost()) throw new Error("WebGL context lost during scene transition");
+      await spark.update({ scene, camera });
+      const displayed = spark.display.mapping;
+      if (displayed.length === 1 && displayed[0].node === context.splat) return;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    } while (performance.now() < deadline);
+    throw new Error("Destination rendering timed out");
+  }
+
+  function freezeScene(on) {
+    sceneFrozen = on;
+    nav.stop();
+    clearTimeout(clickTimer);
+    held.clear(); keyVel.set(0, 0, 0); keyWalking = false;
+    app?.joystick?.reset();
+    look.keys.clear();
+    audio.pause();
+    if (autoTour) stopAuto();
+    look.enabled = !on;
+  }
+
+  function activateIndependent(context, entrance) {
+    const definition = app.sceneConfig.spaces.find((s) => s.id === entrance.space);
+    // Validate/build everything that can fail before replacing the current scene.
+    const position = new THREE.Vector3(...entrance.position);
+    if (![...position, entrance.yaw].every(Number.isFinite)) throw new Error("Invalid entrance pose");
+    const nextWalk = context.walkMap || new WalkMap(context.occ, context.tour);
+    rememberCurrent();
+    photos.toggle(false);
+    photos.box.hidden = photos.overlay.hidden = true;
+    scene.remove(splat);
+    splat.visible = false;
+    tour = context.tour; splat = context.splat; occ = context.occ;
+    lighting = context.lighting; audio = context.audio; streaming = context.streaming;
+    $("#musicPlay").textContent = "재생"; $("#musicPlay").classList.remove("on");
+    $('[data-act="music"]').classList.remove("on"); $("#musicNow").textContent = "";
+    activeSceneName = context.name;
+    app.activeSpace = definition; app.tour = tour;
+    walkMap = nextWalk;
+    if (!context.walkMap) { app.limitWalk(walkMap); context.walkMap = walkMap; }
+    nav.tour = tour; nav.current = null; nav.hold = false;
+    nav.planner = walkMode ? planWalk : null;
+    hotspots.clear(); hotspots.setCursor(null); hotspots.tour = tour;
+    hoverMarker = pendingHover = null;
+    thumbs.clear(); thumbEls.clear(); track.replaceChildren();
+    photos.tour = tour; photos.list = []; photos.index = -1;
+    photosBtn.hidden = true; photosBtn.classList.remove("on");
+    const photoTour = tour;
+    photos.load().then((ok) => { if (tour === photoTour) photosBtn.hidden = !ok; }).catch(() => {});
+    pano.splat = splat;
+    for (const value of pano.cache.values()) value?.dispose?.();
+    pano.cache.clear();
+    minimap = null; $("#minimap").hidden = true;
+    rebuildLights();
+    for (const [id, key] of [["#sExposure", "exposure"], ["#sKelvin", "kelvin"], ["#sAmbient", "ambient"], ["#sSaturation", "saturation"]]) $(id).value = lighting.params[key];
+    splat.edits = null; splat.opacity = 1; splat.visible = true;
+    scene.add(splat);
+    rig.position.copy(position); rig.updateMatrixWorld(true);
+    look.set(entrance.yaw, entrance.pitch ?? -.12);
+    look.update(0); // Input stays frozen, but render the destination camera immediately.
+    camera.updateMatrixWorld(true);
+    Object.assign(stepper, { goal: null, anim: null, active: false, lastX: position.x, lastZ: position.z });
+    $("#title").textContent = tour.title; $("#subtitle").textContent = tour.subtitle;
+    $("#nodeName").textContent = definition.name;
+    $("#streamPill")?.classList.remove("show");
+    const address = new URL(location.href);
+    address.searchParams.set("scene", activeSceneName);
+    address.searchParams.set("pose", [...position, entrance.yaw, entrance.pitch ?? -.12].join(","));
+    address.searchParams.delete("node");
+    history.replaceState(null, "", address);
+    Object.assign(window.splattour, { sceneName: activeSceneName, tour, splat, occ, walkMap, lighting, audio });
+    window.__study?.log("scene_pose", { scene: activeSceneName, position: position.toArray(), yaw: entrance.yaw });
+    tour.markLoaded();
+  }
+
   // Zoomed all the way in and still scrolling → step toward what is under the
   // cursor (a 3D scene can get closer, not just crop the picture).
   let pushAcc = 0;
   canvas.addEventListener("wheel", (e) => {
-    if (mode !== "splat" || nav.busy || e.deltaY >= 0) { pushAcc = 0; return; }
+    if (sceneFrozen || mode !== "splat" || nav.busy || e.deltaY >= 0) { pushAcc = 0; return; }
     if (look.targetFov > look.minFov + 0.5) return;
     pushAcc += -e.deltaY;
     if (pushAcc < 240) return; // about two notches past the limit
@@ -988,7 +1113,7 @@ async function main() {
   const held = new Set();
   window.addEventListener("keydown", (e) => {
     if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
-    held.add(e.code);
+    if (!sceneFrozen) held.add(e.code);
   });
   window.addEventListener("keyup", (e) => held.delete(e.code));
   window.addEventListener("blur", () => held.clear());
@@ -1146,9 +1271,13 @@ async function main() {
   renderer.setAnimationLoop((now) => {
     timer.update(now);
     const dt = Math.min(timer.getDelta(), 0.1);
-    if (!renderer.xr.isPresenting) {
+    if (!renderer.xr.isPresenting && !sceneFrozen) {
+      const previousPosition = rig.position.clone();
       keyWalk(dt);
       nav.update(dt);
+      if (app?.sceneLinksEnabled && app.stepBlocked(previousPosition.x, previousPosition.z, rig.position.x, rig.position.z)) {
+        rig.position.copy(previousPosition); nav.stop(); keyVel.set(0, 0, 0);
+      }
       followFloor(dt);
       // walking pace needs only a hint of the comfort vignette
       const vk = keyVel.length();
@@ -1166,7 +1295,7 @@ async function main() {
     if (streaming) updateStreamPill();
     app?.frame(dt);
 
-    if (autoTour && !nav.busy && !pano.fade) {
+    if (!sceneFrozen && autoTour && !nav.busy && !pano.fade) {
       autoTour.wait += dt;
       look.autoRotate = true;
       if (autoTour.wait > 4) {
@@ -1195,7 +1324,7 @@ async function main() {
 
   // Debug / automation hooks (used by the evaluation scripts).
   const toggleCinema = () => { if (!cinema) return; if (cinema.active) cinema.stop(); else cinema.start().then((ok) => ok && toast("자동 둘러보기 · 화면을 누르면 멈춰요", 3000)); };
-  window.splattour = { toggleCinema, walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat), progress: () => (streaming ? { full: streaming.full && { ...streaming.full }, shown: streaming.shown || 0, pill: $("#streamPill")?.textContent || "", pillOn: !!$("#streamPill")?.classList.contains("show") } : null) };
+  window.splattour = { sceneName: activeSceneName, toggleCinema, walkMap, photos, tour, occ, lighting, audio, setLamp, nav, look, cinema, rig, camera, renderer, spark, splat, go, setMode, THREE, thumbs, Minimap, stream: () => streamState(splat), progress: () => (streaming ? { full: streaming.full && { ...streaming.full }, shown: streaming.shown || 0, pill: $("#streamPill")?.textContent || "", pillOn: !!$("#streamPill")?.classList.contains("show") } : null) };
 }
 
 main().catch((err) => {

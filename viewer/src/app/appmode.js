@@ -9,6 +9,7 @@ import { ViewerChrome, matchLook } from "./chrome.js";
 import { TaskRunner } from "./tasks.js";
 import { summarizeApp } from "./studylog.js";
 import "./viewer.css";
+import { SceneLinks, mapPose, localPoint } from "./scene-links.js";
 
 // Before the viewer builds anything: data, names, hide the tour's own UI.
 export async function prepare({ params, tour }) {
@@ -26,19 +27,40 @@ export async function prepare({ params, tour }) {
     }
   }
   // markers and labels speak the same room names as the 360° tour
-  if (nav) for (const n of tour.nodes) n.name = nav.roomName(nav.nearest(n.position.x, n.position.z).node.room);
-  return new AppMode({ params, tour, listing, nav, spaceId });
+  const app = new AppMode({ params, tour, listing, nav, spaceId });
+  if (nav) for (const n of tour.nodes) n.name = nav.roomName(app.roomAt(n.position));
+  return app;
 }
 
 class AppMode {
-  constructor(o) { Object.assign(this, o); }
+  constructor(o) {
+    Object.assign(this, o);
+    this.sceneConfig = this.nav?.sceneLinks;
+    this.activeSpace = this.sceneConfig?.spaces.find((s) => s.scene === this.params.get("scene"));
+    this.sceneLinksEnabled = !!this.activeSpace;
+  }
+
+  mapPose(position = this.rig.position, yaw = this.look.yaw) {
+    return mapPose(this.activeSpace, position, yaw);
+  }
+
+  roomAt(position) {
+    const pose = this.mapPose(position, 0);
+    const allowed = this.activeSpace?.rooms;
+    const nodes = allowed ? this.nav.nodes.filter((n) => allowed.includes(n.room)) : this.nav.nodes;
+    return nodes.reduce((best, n) => !best || Math.hypot(n.position[0] - pose.x, n.position[2] - pose.z) < Math.hypot(best.position[0] - pose.x, best.position[2] - pose.z) ? n : best, null)?.room;
+  }
 
   // Same exploration range as the 360° condition: walkable cells farther than
   // range.radius from every capture point are closed (?range=0 turns this off).
   limitWalk(walkMap) {
     const R = +(this.params.get("range") ?? this.nav?.range?.radius ?? 0);
     if (!walkMap || !this.nav || !(R > 0)) return;
-    const pts = this.nav.nodes.map((n) => [n.position[0], n.position[2]]);
+    const pts = this.sceneLinksEnabled
+      ? (this.activeSpace.scene === this.nav.scene
+        ? this.nav.nodes.filter((n) => this.activeSpace.rooms.includes(n.room)).map((n) => [n.position[0], n.position[2]])
+        : this.tour.nodes.map((n) => [n.position.x, n.position.z]))
+      : this.nav.nodes.map((n) => [n.position[0], n.position[2]]);
     const orig = walkMap.level.bind(walkMap);
     walkMap.level = (fy) => {
       const g = orig(fy);
@@ -88,7 +110,7 @@ class AppMode {
     let lastRoom = null;
     const rooms = () => {
       if (!nav) return;
-      const r = nav.nearest(rig.position.x, rig.position.z).node.room;
+      const r = this.roomAt(rig.position);
       this.room = r;
       if (r !== lastRoom) {
         lastRoom = r;
@@ -97,6 +119,7 @@ class AppMode {
         this.runner?.roomChanged(r);
       }
     };
+    this.updateRoom = rooms;
     rooms();
     this.roomTimer = setInterval(rooms, 250);
 
@@ -104,13 +127,17 @@ class AppMode {
     const jump = async (id) => {
       const n = nav.byId.get(id);
       if (!n) return;
-      const p = new THREE.Vector3(...n.position);
+      if (this.sceneLinksEnabled && !this.activeSpace.rooms.includes(n.room)) {
+        chrome.toast("입구의 화살표로 다른 공간에 이동해 주세요");
+        return;
+      }
+      const p = localPoint(this.activeSpace, n.position);
       const yaw = ((n.imageYawDeg || 0) * Math.PI) / 180;
       if (navigator3d.moving) navigator3d.stop();
-      const tn = tour.nearestNode(p);
+      const tn = this.tour.nearestNode(p);
       if (tn && Math.hypot(tn.position.x - p.x, tn.position.z - p.z) < 0.3) navigator3d.jumpTo(tn, { yaw, pitch: -0.2 });
       else {
-        rig.position.set(p.x, (tn?.floorY ?? 0) + tour.eyeHeight, p.z);
+        rig.position.set(p.x, (tn?.floorY ?? 0) + this.tour.eyeHeight, p.z);
         navigator3d.current = null;
         look.set(yaw, -0.2);
       }
@@ -118,7 +145,7 @@ class AppMode {
       rooms();
     };
     // same start as the 360° tour
-    if (nav && !params.get("node")) await jump(nav.start.id);
+    if (nav && !params.get("node") && !params.get("pose") && (!this.sceneLinksEnabled || this.activeSpace.scene === nav.scene)) await jump(nav.start.id);
 
     // ≡ menu: the tour's own tools (their code stays in main.js; these just
     // press them). Not in the study, so both conditions show the same screen.
@@ -144,14 +171,28 @@ class AppMode {
     }
 
     // doors between places: the same data, look, timing and sound as the 360° viewer (../doors.js)
-    await this.setupDoors({ ...viewer, tour, log }).catch((e) => console.warn("[doors]", e));
+    if (this.sceneLinksEnabled) {
+      this.view = viewer;
+      this.links = new SceneLinks({
+        config: this.sceneConfig, active: this.activeSpace.id, rig, camera: viewer.camera, canvas,
+        load: viewer.loadIndependent, activate: viewer.activateIndependent, ready: viewer.waitIndependentFrame, freeze: viewer.freeze,
+        log, toast: (text, ms) => chrome.toast(text, ms),
+        onChange: (context, definition) => {
+          this.activeSpace = definition;
+          this.tour = context.tour;
+          rooms();
+          const p = this.mapPose();
+          chrome.setPose(p.x, p.z, p.yaw);
+        },
+      });
+    } else await this.setupDoors({ ...viewer, tour, log }).catch((e) => console.warn("[doors]", e));
 
     const tasks = nav && (STUDY || params.get("tasks") === "1") ? await loadTasks(this.spaceId, listing) : [];
     const next = params.get("next");
     if (tasks.length) {
       this.runner = new TaskRunner({
         slot: chrome.taskSlot, tasks, nav, log, look,
-        getPose: () => ({ x: rig.position.x, z: rig.position.z, yaw: look.yaw, room: this.room }),
+        getPose: () => ({ ...this.mapPose(), room: this.room }),
         jumpTo: jump,
         onDone: () => {
           log("end", { summary: summarizeApp(study?.all || []) });
@@ -168,7 +209,9 @@ class AppMode {
   frame(dt = 1 / 60) {
     if (!this.chrome) return;
     this.chrome.update();
-    this.chrome.setPose(this.rig.position.x, this.rig.position.z, this.look.yaw);
+    const pose = this.mapPose();
+    this.chrome.setPose(pose.x, pose.z, pose.yaw);
+    this.links?.update();
     if (this.doorSet) this.updateDoors(dt);
   }
 
@@ -354,6 +397,22 @@ class AppMode {
 
   // keyboard walking: no stepping through a door whose other side is not loaded yet
   stepBlocked(px, pz, nx, nz) {
+    if (this.links?.busy) return true;
+    if (this.sceneLinksEnabled) {
+      // An entrance is crossed only by clicking its arrow, even in free flight.
+      for (const link of this.sceneConfig.links) {
+        const end = link.a.space === this.activeSpace.id ? link.a : link.b.space === this.activeSpace.id ? link.b : null;
+        if (!end?.barrier) continue;
+        const { center, normal, halfWidth = 1.5 } = end.barrier;
+        const side = (x, z) => (x - center[0]) * normal[0] + (z - center[1]) * normal[1];
+        const a = side(px, pz), b = side(nx, nz);
+        if (a <= 0 && b > 0) {
+          const t = -a / (b - a), x = px + (nx - px) * t, z = pz + (nz - pz) * t;
+          if (Math.abs((x - center[0]) * -normal[1] + (z - center[1]) * normal[0]) < halfWidth) return true;
+        }
+      }
+      return false;
+    }
     if (!this.portals) return false;
     for (const d of this.portals.doors) if (!this.portals.ready(d) && this.D.segmentCrossing(d, px, pz, nx, nz, 0.3)) return true;
     return false;

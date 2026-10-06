@@ -1,0 +1,7 @@
+.scene-links { position: fixed; inset: 0; pointer-events: none; z-index: 35; }
+.scene-link { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 3px; border: 0; background: transparent; color: white; font: 600 13px system-ui; text-shadow: 0 1px 4px #000; cursor: pointer; }
+.scene-link[hidden] { display: none; }
+.scene-link-arrow { display: grid; place-items: center; width: 58px; height: 44px; border: 2px solid white; border-radius: 50%; background: #142637b8; font-size: 30px; box-shadow: 0 2px 12px #0006; }
+.scene-link:focus-visible { outline: 3px solid #80beff; border-radius: 10px; }
+.scene-transition { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: #0c0c0d; color: white; font: 15px system-ui; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .18s, visibility .18s; }
+.scene-transition.on { opacity: 1; visibility: visible; pointer-events: auto; }

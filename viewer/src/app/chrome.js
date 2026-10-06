@@ -119,14 +119,14 @@ export class ViewerChrome {
     if (o.plan === false || !o.nav) { btn.hidden = true; return; }
     this.miniOn = true;
     this.sheetOn = false;
-    PlanData.load(o.nav, o.base).then((data) => {
+    PlanData.load(o.nav, o.base, { condition: o.condition }).then((data) => {
       this.plan = data;
       this.mini = new PlanCanvas(this.$(".vc-plan canvas"), data, { compact: true });
       this.full = new PlanCanvas(this.$(".vc-sheet-canvas"), data, { interactive: true });
       // the mini card and the sheet take the plan's proportions
-      const asp = data.W / data.H;
+      const asp = data.compactBounds ? data.compactBounds[2] / data.compactBounds[3] : data.W / data.H;
       this.el.style.setProperty("--plan-asp", String(Math.min(2.4, Math.max(0.8, asp))));
-      const wk = asp > 1.6 ? 1.2 : 1;
+      const wk = data.illustrated ? 1.5 : asp > 1.6 ? 1.2 : 1;
       this.$(".vc-plan").style.width = `calc(var(--plan) * ${wk})`;
       this.$(".vc-plan").style.height = `calc(var(--plan) * ${wk} / ${Math.min(2.2, Math.max(0.9, asp)).toFixed(3)} + 18px)`;
       this.$(".vc-plan").hidden = !this.miniOn;

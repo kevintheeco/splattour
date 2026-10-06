@@ -34,7 +34,7 @@ export function summarize(events) {
   };
 }
 
-export function start({ nav, look, rig, params, canvas, getMode, tour }) {
+export function start({ nav, look, rig, params, canvas, getMode, tour, getPose = () => ({ ...rig.position, yaw: look.yaw }) }) {
   // transport, session id and local backup are shared with the 360° viewer (app/studylog.js)
   const S = createStudyLog({
     pid: params.get("study"),
@@ -56,8 +56,8 @@ export function start({ nav, look, rig, params, canvas, getMode, tour }) {
 
   // pose sampled at 4 Hz: position, yaw, pitch, fov (enough for path plots and heatmaps)
   const poseTimer = setInterval(() => {
-    const p = rig.position;
-    log("pose", { p: [+p.x.toFixed(3), +p.y.toFixed(3), +p.z.toFixed(3)], yaw: +look.yaw.toFixed(3), pitch: +look.pitch.toFixed(3), fov: +look.fov.toFixed(1) });
+    const p = getPose();
+    log("pose", { p: [+p.x.toFixed(3), +p.y.toFixed(3), +p.z.toFixed(3)], yaw: +p.yaw.toFixed(3), scene: p.scene, pitch: +look.pitch.toFixed(3), fov: +look.fov.toFixed(1) });
     if (Math.abs(look.targetFov - lastFov) > 0.5) { log("zoom", { fov: +look.targetFov.toFixed(1) }); lastFov = look.targetFov; }
     const m = getMode();
     if (m !== lastMode) { log("mode", { mode: m }); lastMode = m; }

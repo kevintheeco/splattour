@@ -46,17 +46,21 @@ export class Joystick {
     el.addEventListener("pointermove", (e) => { if (e.pointerId === this.id) { e.preventDefault(); move(e); } });
     const end = (e) => {
       if (e.pointerId !== this.id) return;
-      this.id = null;
-      this.vec = { x: 0, y: 0 };
-      this.knob.style.transform = "";
-      el.classList.remove("held");
-      if (this.use) this.log("joystick", { phase: "end", ms: Math.round(performance.now() - this.use.t0), maxPush: +this.use.maxK.toFixed(2), meters: +(this.use.dist || 0).toFixed(2) });
-      this.use = null;
+      this.reset();
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
     // no page scroll / zoom / look from touches on the stick
     for (const ev of ["touchstart", "touchmove", "contextmenu"]) el.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+  }
+
+  reset() {
+    this.id = null;
+    this.vec = { x: 0, y: 0 };
+    this.knob.style.transform = "";
+    this.el.classList.remove("held");
+    if (this.use) this.log("joystick", { phase: "end", ms: Math.round(performance.now() - this.use.t0), maxPush: +this.use.maxK.toFixed(2), meters: +(this.use.dist || 0).toFixed(2) });
+    this.use = null;
   }
 
   // walked distance while held (reported with the end event)
