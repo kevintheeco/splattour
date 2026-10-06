@@ -1,3 +1,5 @@
+import "./joystick.css";
+
 // Virtual joystick for touch phones, 3DGS 자유 시점 탐색 only (the 360°
 // condition moves by hotspots). A translucent ring bottom-left with a knob:
 // push up = walk forward, sideways = step sideways, speed grows with how far
@@ -50,17 +52,27 @@ export class Joystick {
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
+    el.addEventListener("lostpointercapture", end);
+    window.addEventListener("blur", () => this.reset());
+    document.addEventListener("visibilitychange", () => { if (document.hidden) this.reset(); });
     // no page scroll / zoom / look from touches on the stick
     for (const ev of ["touchstart", "touchmove", "contextmenu"]) el.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
   }
 
   reset() {
+    const id = this.id;
     this.id = null;
+    if (id !== null && this.el.hasPointerCapture(id)) this.el.releasePointerCapture(id);
     this.vec = { x: 0, y: 0 };
     this.knob.style.transform = "";
     this.el.classList.remove("held");
     if (this.use) this.log("joystick", { phase: "end", ms: Math.round(performance.now() - this.use.t0), maxPush: +this.use.maxK.toFixed(2), meters: +(this.use.dist || 0).toFixed(2) });
     this.use = null;
+  }
+
+  setVisible(visible) {
+    if (!visible) this.reset();
+    this.el.hidden = !visible;
   }
 
   // walked distance while held (reported with the end event)

@@ -163,13 +163,6 @@ class AppMode {
       ]);
     }
 
-    // touch phones walk with a joystick (bottom-left), like W A S D on a keyboard;
-    // the plan sits bottom-right in both conditions (same place in the 360° viewer)
-    if (matchMedia("(pointer: coarse)").matches && params.get("move") !== "fly" && params.get("joystick") !== "0") {
-      const { Joystick } = await import("./joystick.js");
-      this.joystick = new Joystick({ log });
-    }
-
     // doors between places: the same data, look, timing and sound as the 360° viewer (../doors.js)
     if (this.sceneLinksEnabled) {
       this.view = viewer;
