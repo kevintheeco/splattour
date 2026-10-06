@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>월하정 · 추가 360° 촬영본</title>
+  <link rel="stylesheet" href="/src/pano-additional.css">
+</head>
+<body>
+  <main id="stage"><canvas id="view" aria-label="360도 사진. 드래그로 둘러보고 휠로 확대하세요." tabindex="0"></canvas></main>
+  <header><div><small>월하정 · 360° 촬영본</small><h1 id="title">사진을 불러오는 중</h1></div><button id="fullscreen" aria-label="전체 화면">전체 화면</button></header>
+  <div id="status" role="status" aria-live="polite"></div>
+  <footer>
+    <div class="toolbar"><button id="prev" aria-label="이전 사진">← 이전</button><span id="counter"></span><button id="next" aria-label="다음 사진">다음 →</button><button id="reset">시선 초기화</button><button id="toggle" aria-expanded="true" aria-controls="gallery">사진 목록 접기</button></div>
+    <p>드래그로 둘러보기 · 휠 / 두 손가락으로 확대</p>
+    <section id="gallery" aria-label="촬영 사진 선택"><select id="filter" aria-label="공간 선택"><option value="">전체 공간</option></select><div id="thumbs"></div></section>
+  </footer>
+  <script type="module" src="/src/pano-additional.js"></script>
+</body>
+</html>

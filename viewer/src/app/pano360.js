@@ -10,7 +10,7 @@
 // placeholder (and only with &dev=1 while nav.json says the captures are not ready).
 import * as THREE from "three";
 import { LookControls } from "../look.js";
-import { loadListing, loadNav, loadPanoNav, loadTasks, esc, bearing, spaceBase } from "./data.js";
+import { loadListing, loadNav, loadPanoNav, prepareNav, loadTasks, esc, bearing, spaceBase } from "./data.js";
 import { icon } from "./icons.js";
 import { capturePicker } from "./capture-picker.js";
 import { ViewerChrome, matchLook } from "./chrome.js";
@@ -94,7 +94,12 @@ const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 async function main() {
   const listing = await loadListing(spaceId);
-  const nav = await (STUDY ? loadNav : loadPanoNav)(spaceId, listing, params.get("navfile"));
+  let nav = await (STUDY ? loadNav : loadPanoNav)(spaceId, listing, params.get("navfile"));
+  if (!STUDY && params.get("editorPreview") === "1") {
+    const draft = JSON.parse(localStorage.getItem("splattour-editor-preview") || "null");
+    if (!draft?.nodes?.length) throw new Error("편집기에서 이동 테스트를 다시 열어 주세요.");
+    nav = prepareNav(draft, spaceBase(spaceId));
+  }
   document.title = `${listing.title} · 360° 시점 탐색`;
   const backHref = `/listing.html?id=${encodeURIComponent(spaceId)}`;
 
@@ -183,23 +188,28 @@ async function main() {
     const yaw = o?.yawDeg != null ? yawOfNode(from) + o.yawDeg * DEG : bearing(from.position, to.position);
     const horiz = Math.hypot(to.position[0] - from.position[0], to.position[2] - from.position[2]);
     const d = o?.pitchDeg != null && o.pitchDeg < -3 ? EYE / Math.tan(-o.pitchDeg * DEG) : THREE.MathUtils.clamp(horiz, 1.3, 3.2);
-    return { yaw, d };
+    return { yaw, d, pitch: o?.pitchDeg, hotspot: o };
   }
   function showSpots(node) {
     clearSpots();
     for (const id of node.neighbors) {
       const to = nav.byId.get(id);
       if (!to) continue;
-      const { yaw, d } = hotspotDir(node, to);
+      const { yaw, d, pitch, hotspot } = hotspotDir(node, to);
       const g = new THREE.Group();
-      g.position.set(-Math.sin(yaw) * d, -EYE, -Math.cos(yaw) * d);
+      if (pitch != null) {
+        const r = 3, p = pitch * DEG;
+        g.position.set(-Math.sin(yaw)*Math.cos(p)*r, Math.sin(p)*r, -Math.cos(yaw)*Math.cos(p)*r);
+      } else g.position.set(-Math.sin(yaw) * d, -EYE, -Math.cos(yaw) * d);
       hsGroup.add(g);
       const label = document.createElement("button");
       label.className = "pv-hotspot";
       label.type = "button";
-      const name = to.label || nav.roomName(to.room);
+      const name = hotspot?.label || to.label || nav.roomName(to.room);
       label.setAttribute("aria-label", `${name}(으)로 이동`);
       label.innerHTML = `<span class="pv-hotspot-circle"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 25V8M8 16l8-8 8 8"/></svg></span><span class="pv-hotspot-name">${esc(name)}</span>`;
+      label.querySelector("svg").style.transform = `rotate(${Number(hotspot?.arrowRotationDeg)||0}deg)`;
+      label.dataset.to = to.id;
       label.addEventListener("click", () => go(to));
       labels.appendChild(label);
       spots.push({ to, g, label, yaw, t: 0 });
@@ -327,7 +337,27 @@ async function main() {
     }
   }
 
+  let routing = false;
   async function go(to) {
+    if (routing || busy || !to || to === current) return;
+    // The capture picker follows the same walkable graph as the floor arrows.
+    const queue = [[current.id]], seen = new Set([current.id]);
+    let route;
+    while (queue.length) {
+      const path = queue.shift(), id = path.at(-1);
+      if (id === to.id) { route = path.slice(1); break; }
+      for (const next of nav.byId.get(id).neighbors) {
+        if (!seen.has(next)) { seen.add(next); queue.push([...path, next]); }
+      }
+    }
+    if (!route) return;
+    routing = true;
+    try { for (const id of route) await hopTo(nav.byId.get(id)); }
+    catch { /* hopTo restores the current scene and displays a retry message. */ }
+    finally { routing = false; }
+  }
+
+  async function hopTo(to) {
     if (busy || !to || to === current) return;
     busy = true;
     hideHint();
@@ -345,7 +375,7 @@ async function main() {
       for (const h of hop) doorSet.release(h.door.id);
       showSpots(from);
       chrome.toast("사진을 불러오지 못했어요. 화살표를 눌러 다시 시도해 주세요.");
-      return;
+      throw new Error("Panorama loading failed");
     }
     const dist = Math.hypot(to.position[0] - from.position[0], to.position[2] - from.position[2]);
     U.texB.value = t;
@@ -354,9 +384,14 @@ async function main() {
     U.highlightsB.value = to.highlightPreservation ?? 0;
     U.colorBalanceB.value.fromArray(to.colorBalance ?? [1, 1, 1]);
     U.posB.value.copy(V(to.position));
-    U.radA.value = U.radB.value = Math.max(2.6, dist * 1.3);
+    // A larger proxy sphere limits wall stretching without losing the forward motion.
+    U.radA.value = U.radB.value = Math.max(4, dist * 3);
     U.warp.value = style === "warp" ? 1 : 0;
-    await new Promise((resolve) => { fade = { t: 0, resolve, from, to }; });
+    chrome.setRoom(`${from.label} → ${to.label}`, from.room);
+    await new Promise((resolve) => { const h = from.hotspots?.find(h => h.to === to.id);
+      fade = { t: 0, resolve, from, to, yaw: look.yaw, pitch: look.pitch,
+        arrivalYaw: h?.arrivalYawDeg == null ? null : h.arrivalYawDeg * DEG,
+        arrivalPitch: (h?.arrivalPitchDeg ?? -12) * DEG }; });
     U.texA.value = t;
     U.yawA.value = U.yawB.value;
     U.exposureA.value = U.exposureB.value;
@@ -378,13 +413,17 @@ async function main() {
     if (!f) return;
     f.t = Math.min(1, f.t + dt / duration);
     const e = smoother(f.t);
+    if (f.arrivalYaw != null) {
+      const delta = Math.atan2(Math.sin(f.arrivalYaw-f.yaw),Math.cos(f.arrivalYaw-f.yaw));
+      look.set(f.yaw+delta*e,f.pitch+(f.arrivalPitch-f.pitch)*e);
+    }
     if (style === "warp") {
       U.eye.value.lerpVectors(U.posA.value, U.posB.value, e);
       U.mixAB.value = THREE.MathUtils.smoothstep(f.t, 0.25, 0.85);
-      look.fovKick = -5 * Math.sin(Math.PI * f.t);
+      look.fovKick = -2 * Math.sin(Math.PI * f.t);
     } else {
       U.mixAB.value = e;
-      look.fovKick = -12 * Math.sin(Math.PI * Math.min(1, f.t * 1.1)) * (1 - f.t * 0.2);
+      look.fovKick = 0;
     }
     if (f.t >= 1) { fade = null; f.resolve(); }
   }
@@ -394,7 +433,7 @@ async function main() {
     current = node;
     doorsFrom(node);
     showSpots(node);
-    chrome.setRoom(nav.roomName(node.room), node.room);
+    chrome.setRoom(node.label || nav.roomName(node.room), node.room);
     const u = new URL(location.href);
     u.searchParams.set("node", node.id);
     history.replaceState(null, "", u);
@@ -431,7 +470,7 @@ async function main() {
   // ---------- chrome, study, tasks ----------
   const chrome = new ViewerChrome({
     spaceTitle: listing.title, condition: "pano", backHref: STUDY ? "#" : backHref, nav, look, base: spaceBase(spaceId),
-    plan: params.get("plan") !== "0" && !nav.status?.positionsApproximate,
+    plan: params.get("plan") !== "0" && (!!nav.spatialPlan || !nav.status?.positionsApproximate),
     onBack: () => (STUDY ? confirm("실험을 그만두고 나갈까요?") : true),
   });
   if (nav.devOnly) chrome.dev(nav.nodes.some((n) => !n.panoUrl) ? "360 촬영본이 도착하기 전의 자리표시 화면이에요" : "3DGS에서 렌더링한 임시 파노라마예요. 실험의 360° 조건은 실제 360 촬영본만 씁니다");

@@ -1,43 +1,19 @@
 {
   "version": 1,
-  "status": {
-    "ready": true,
-    "devPlaceholder": false,
-    "positionsApproximate": true,
-    "source": "360panorama_추가: 38 unique original equirectangular photos",
-    "note": "Exact photo assignments, user map positions and calibrated image headings from user export (3). Graph hotspots derive from these calibrated headings.",
-    "userLayout": "wolhajeong-viewpoints (3).json",
-    "approvedAddedConnection": [
-      "p099",
-      "p083"
-    ]
-  },
-  "transition": {
-    "style": "warp",
-    "duration": 0.95
-  },
-  "start": "p096",
-  "rooms": [
-    {
-      "id": "yard",
-      "name": "앞마당"
-    },
-    {
-      "id": "living",
-      "name": "안채 거실"
-    },
-    {
-      "id": "bedroom",
-      "name": "침실 · 자쿠지"
-    },
-    {
-      "id": "bath",
-      "name": "자쿠지 옆 욕실"
-    },
-    {
-      "id": "small",
-      "name": "작은 침실 · 욕실"
-    }
+  "kind": "panorama-map-edit",
+  "excludedIds": [
+    "p067",
+    "p068",
+    "p078",
+    "p100",
+    "p071",
+    "p085",
+    "p086",
+    "p103"
+  ],
+  "referenceSize": [
+    1952,
+    1277
   ],
   "nodes": [
     {
@@ -285,8 +261,8 @@
         {
           "to": "p104",
           "label": "침실 현관",
-          "yawDeg": -80.33171106557381,
-          "pitchDeg": -34.71183401639345,
+          "yawDeg": -70.82823960880194,
+          "pitchDeg": -49.74996179706602,
           "arrowRotationDeg": 24
         },
         {
@@ -298,7 +274,7 @@
         },
         {
           "to": "p105",
-          "label": "침실 창가",
+          "label": "작은 침실 창가 · 두 번째 촬영",
           "yawDeg": 18.221080378973056,
           "pitchDeg": -34.90009932762837,
           "arrowRotationDeg": 0
@@ -725,10 +701,10 @@
       "hotspots": [
         {
           "to": "p083",
-          "label": "침실 입구",
+          "label": "작은 침실 1",
           "yawDeg": -38.2441,
           "pitchDeg": -30,
-          "arrowRotationDeg": 33
+          "arrowRotationDeg": 35
         }
       ],
       "pano": "/pano-additional/p086.jpg",
@@ -790,20 +766,7 @@
       }
     }
   ],
-  "captureBrowser": true,
-  "scene": "wolhajeong-pano-map",
-  "spatialPlan": "spatial-map.pano.json",
-  "showMapRoutes": true,
-  "excludedPointIds": [
-    "p071",
-    "p085",
-    "p086",
-    "p103"
-  ],
-  "assignmentRevision": "user-layout-8-v1",
-  "editorRevision": "user-layout-8-v1",
-  "directed": true,
-  "editorEdges": [
+  "edges": [
     [
       "living-entry",
       "p072"
@@ -1254,5 +1217,9 @@
       "arrivalYawDeg": 153.43,
       "arrivalPitchDeg": -12
     }
-  ]
+  ],
+  "appliedTransitionRestorations": [
+    "show-099-to-083-v1"
+  ],
+  "editedAt": "2026-10-06T10:33:56.677Z"
 }

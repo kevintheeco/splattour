@@ -61,7 +61,7 @@ export function prepareNav(nav, base = "") {
   for (const n of nodes) {
     for (const m of n.neighbors) {
       const o = byId.get(m);
-      if (o && !o.neighbors.includes(n.id)) o.neighbors.push(n.id);
+      if (!nav.directed && o && !o.neighbors.includes(n.id)) o.neighbors.push(n.id);
     }
     if (!rooms.has(n.room)) rooms.set(n.room, { id: n.room, name: n.room, nodes: [] });
     rooms.get(n.room).nodes.push(n);
