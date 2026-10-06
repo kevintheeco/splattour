@@ -57,7 +57,9 @@ class AppMode {
     const R = +(this.params.get("range") ?? this.nav?.range?.radius ?? 0);
     if (!walkMap || !this.nav || !(R > 0)) return;
     const pts = this.sceneLinksEnabled
-      ? this.tour.nodes.map((n) => [n.position.x, n.position.z])
+      ? (this.activeSpace.scene === this.nav.scene
+        ? this.nav.nodes.filter((n) => this.activeSpace.rooms.includes(n.room)).map((n) => [n.position[0], n.position[2]])
+        : this.tour.nodes.map((n) => [n.position.x, n.position.z]))
       : this.nav.nodes.map((n) => [n.position[0], n.position[2]]);
     const orig = walkMap.level.bind(walkMap);
     walkMap.level = (fy) => {
@@ -173,7 +175,7 @@ class AppMode {
       this.view = viewer;
       this.links = new SceneLinks({
         config: this.sceneConfig, active: this.activeSpace.id, rig, camera: viewer.camera, canvas,
-        load: viewer.loadIndependent, activate: viewer.activateIndependent, freeze: viewer.freeze,
+        load: viewer.loadIndependent, activate: viewer.activateIndependent, ready: viewer.waitIndependentFrame, freeze: viewer.freeze,
         log, toast: (text, ms) => chrome.toast(text, ms),
         onChange: (context, definition) => {
           this.activeSpace = definition;

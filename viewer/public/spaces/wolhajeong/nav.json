@@ -228,7 +228,7 @@
   },
   {
    "id": "n9",
-   "room": "yard",
+   "room": "living",
    "position": [
     -5.5539,
     2.15,
@@ -484,17 +484,15 @@
  ],
  "sceneLinks": {
   "version": 1,
-  "preloadDistance": 5,
-  "note": "Models stay in their own tour coordinates. mapTransform is ONLY for the shared map. Sarang calibration reuses the earlier approximate placement; entrance positions should be reviewed in the viewer.",
+  "preloadDistance": 2.5,
+  "note": "Each model stays in its own tour coordinates; mapTransform is used ONLY for the shared map. Entrance and map calibration are approximate visual matches. Yard, sarang and warm-600 anchae switch exclusively via floor arrows.",
   "spaces": [
    {
     "id": "main",
-    "name": "앞마당·안채",
+    "name": "앞마당",
     "scene": "wolhajeong360-hq",
     "rooms": [
-     "yard",
-     "living",
-     "dark"
+     "yard"
     ]
    },
    {
@@ -517,6 +515,28 @@
       0.6941,
       -2.5207
      ]
+    }
+   },
+   {
+    "id": "anchae",
+    "name": "안채",
+    "scene": "wolhajeong-anchae-warm-600",
+    "rooms": [
+     "living",
+     "dark"
+    ],
+    "mapTransform": {
+     "scale": 0.75,
+     "yawDeg": 180,
+     "position": [
+      -5.55,
+      1.0625,
+      0.8
+     ]
+    },
+    "calibration": {
+     "approximate": true,
+     "note": "Map-only alignment: living-room shelf/glass-door direction matched visually to HQ. Door placement and scale are approximate; not a surveyed registration. Original model/camera coordinates remain unchanged."
     }
    }
   ],
@@ -575,6 +595,63 @@
        -0.6406906379789994
       ],
       "halfWidth": 2.5
+     }
+    }
+   },
+   {
+    "id": "yard-anchae",
+    "a": {
+     "space": "main",
+     "marker": [
+      -5.9657,
+      0.025,
+      -1.1
+     ],
+     "position": [
+      -5.9657,
+      1.45,
+      -1.7
+     ],
+     "yaw": 0,
+     "pitch": -0.12,
+     "radius": 2.8,
+     "barrier": {
+      "center": [
+       -5.8,
+       -0.35
+      ],
+      "normal": [
+       0,
+       1
+      ],
+      "halfWidth": 4
+     }
+    },
+    "b": {
+     "space": "anchae",
+     "marker": [
+      -0.3,
+      0.025,
+      0.45
+     ],
+     "position": [
+      -0.3,
+      1.45,
+      -0.35
+     ],
+     "yaw": 0.0431,
+     "pitch": -0.12,
+     "radius": 2.8,
+     "barrier": {
+      "center": [
+       -0.3,
+       0.8
+      ],
+      "normal": [
+       0,
+       1
+      ],
+      "halfWidth": 2
      }
     }
    }

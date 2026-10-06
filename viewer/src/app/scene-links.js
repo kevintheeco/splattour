@@ -19,8 +19,8 @@ export function localPoint(definition, position) {
 }
 
 export class SceneLinks {
-  constructor({ config, active, camera, rig, canvas, load, activate, freeze, log, toast, onChange }) {
-    Object.assign(this, { config, active, camera, rig, canvas, load, activate, freeze, log, toast, onChange });
+  constructor({ config, active, camera, rig, canvas, load, activate, ready, freeze, log, toast, onChange }) {
+    Object.assign(this, { config, active, camera, rig, canvas, load, activate, ready, freeze, log, toast, onChange });
     this.definitions = new Map(config.spaces.map((s) => [s.id, s]));
     this.pending = new Map();
     this.retryAt = new Map();
@@ -109,7 +109,7 @@ export class SceneLinks {
     try {
       this.toast("다음 공간을 준비하는 중…", 1500);
       const context = await this.ensure(entry.to.space, true);
-      this.cover.textContent = `${this.definitions.get(entry.to.space).name}으로 이동 중`;
+      this.cover.textContent = `${this.definitions.get(entry.to.space).name} 이동 중`;
       this.cover.classList.add("on");
       await new Promise((r) => setTimeout(r, 220));
       // No mesh cross-fade. Old scene is detached before the new one is shown.
@@ -117,6 +117,8 @@ export class SceneLinks {
       this.active = entry.to.space;
       this.onChange(context, this.definition);
       this.rebuild();
+      // Spark keeps the previous GPU accumulator until its asynchronous sort finishes.
+      await this.ready?.(context);
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       this.log?.("scene_transition", { link: entry.link.id, from: previous, to: this.active });
       return true;

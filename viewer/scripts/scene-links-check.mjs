@@ -41,21 +41,23 @@ const status = () => page.evaluate(() => {
   return { active: a.links.active, name: s.sceneName, busy: a.links.busy,
     visible: s.splat.parent.children.filter((o) => o.constructor === s.splat.constructor && o.visible).length,
     edits: s.splat.edits?.length || 0, room: a.room,
+    displayed: s.spark.display.mapping.length === 1 && s.spark.display.mapping[0].node === s.splat,
     pose: a.chrome.st.pose, expected: a.mapPose(), position: s.rig.position.toArray(),
     tourMatches: s.nav.tour === s.tour, mapMatches: s.walkMap.occ === s.occ,
     mapVisible: !a.chrome.$(".vc-plan").hidden,
   };
 });
-async function faceEntrance() {
-  await page.evaluate(() => {
-    const s = window.splattour, a = window.__app, p = a.links.entries[0].point;
+async function faceEntrance(linkId = "yard-sarang") {
+  await page.evaluate((linkId) => {
+    const s = window.splattour, a = window.__app, e = a.links.entries.find(e => e.link.id === linkId), p = e.point;
     s.nav.stop();
     // Face the ground marker from a safe nearby capture location.
     const n = s.tour.nearestNode(p);
     s.rig.position.copy(n.position);
-    const dx = p.x - n.position.x, dz = p.z - n.position.z;
-    s.look.set(Math.atan2(-dx, -dz), Math.atan2(p.y - n.position.y, Math.hypot(dx, dz)));
-  });
+    if (linkId === "yard-anchae") s.rig.position.set(...e.from.position);
+    const dx = p.x - s.rig.position.x, dz = p.z - s.rig.position.z;
+    s.look.set(Math.atan2(-dx, -dz), Math.atan2(p.y - s.rig.position.y, Math.hypot(dx, dz)));
+  }, linkId);
   await page.locator('.scene-link:not([hidden])').waitFor({ state: "visible", timeout: 15000 });
 }
 try {
@@ -74,6 +76,7 @@ try {
   await page.waitForFunction(() => __app.links.active === "sarang" && !__app.links.busy, null, { timeout: 120000 });
   const inside = await status();
   assert.equal(inside.visible, 1);
+  assert.ok(inside.displayed, "old GPU scene must be gone before the fade opens");
   assert.equal(inside.edits, 0);
   assert.equal(inside.room, "sarang");
   assert.equal(inside.name, "wolhajeong360-sarang3");
@@ -94,7 +97,7 @@ try {
   assert.ok(Math.abs(moved.pose.yaw - inside.pose.yaw) > .1);
   await page.screenshot({ path: `output/scene-links/sarang${mobile ? "-mobile" : ""}.png` });
   await faceEntrance();
-  await page.getByRole("button", { name: "앞마당·안채로 이동", exact: true })[mobile ? "tap" : "click"]();
+  await page.getByRole("button", { name: "앞마당으로 이동", exact: true })[mobile ? "tap" : "click"]();
   await page.waitForFunction(() => __app.links.active === "main" && !__app.links.busy);
   assert.ok(await page.evaluate(() => testOriginal.occ === splattour.occ && testOriginal.tour === splattour.tour));
   assert.equal((await status()).visible, 1);
@@ -125,6 +128,47 @@ try {
     return a.stepBlocked(b.center[0] - b.normal[0] * .1, b.center[1] - b.normal[1] * .1,
       b.center[0] + b.normal[0] * .1, b.center[1] + b.normal[1] * .1);
   }));
+  // The third model follows the same exclusive transition and common-map path.
+  await faceEntrance();
+  await page.getByRole("button", { name: "앞마당으로 이동", exact: true })[mobile ? "tap" : "click"]();
+  await page.waitForFunction(() => __app.links.active === "main" && !__app.links.busy);
+  await faceEntrance("yard-anchae");
+  await page.screenshot({ path: `output/scene-links/anchae-entrance${mobile ? "-mobile" : ""}.png` });
+  await page.evaluate(() => { window.yardSplat = splattour.splat; });
+  await page.getByRole("button", { name: "안채로 이동", exact: true })[mobile ? "tap" : "click"]();
+  await page.waitForFunction(() => __app.links.active === "anchae" && !__app.links.busy, null, { timeout: 120000 });
+  const anchae = await status();
+  assert.equal(anchae.name, "wolhajeong-anchae-warm-600");
+  assert.equal(anchae.visible, 1);
+  assert.ok(anchae.displayed, "warm-600 must actually be displayed, not just attached");
+  assert.equal(anchae.edits, 0);
+  assert.ok(["living", "dark"].includes(anchae.room));
+  assert.ok(anchae.tourMatches && anchae.mapMatches && anchae.mapVisible);
+  assert.ok(Math.abs(anchae.pose.x - anchae.expected.x) < .001);
+  assert.ok(Math.abs(anchae.pose.z - anchae.expected.z) < .001);
+  assert.ok(await page.evaluate(() => {
+    const s = splattour, t = s.tour.splatTransform;
+    return !yardSplat.parent && s.splat.position.distanceTo(new s.THREE.Vector3(...t.position)) < 1e-8
+      && Math.abs(s.splat.scale.x - t.scale) < 1e-8;
+  }), "warm-600 must retain its own model transform");
+  await page.waitForTimeout(350); // Let the CSS blackout fade finish.
+  await page.screenshot({ path: `output/scene-links/anchae${mobile ? "-mobile" : ""}.png` });
+  await page.evaluate(() => { splattour.rig.position.x += .12; splattour.look.set(splattour.look.yaw + .2, -.15); });
+  await page.waitForTimeout(150);
+  const anchaeMoved = await status();
+  assert.ok(Math.hypot(anchaeMoved.pose.x - anchae.pose.x, anchaeMoved.pose.z - anchae.pose.z) > .03);
+  assert.ok(Math.abs(anchaeMoved.pose.yaw - anchae.pose.yaw) > .1);
+  await page.reload();
+  await page.waitForFunction(() => window.__app?.links && window.splattour, null, { timeout: 120000 });
+  assert.equal((await status()).active, "anchae");
+  await faceEntrance("yard-anchae");
+  await page.getByRole("button", { name: "앞마당으로 이동", exact: true })[mobile ? "tap" : "click"]();
+  await page.waitForFunction(() => __app.links.active === "main" && !__app.links.busy, null, { timeout: 120000 });
+  assert.equal((await status()).visible, 1);
+  assert.ok(await page.evaluate(() => {
+    const a = __app, b = a.links.entries.find(e => e.link.id === "yard-anchae").from.barrier;
+    return a.stepBlocked(b.center[0], b.center[1] - .1, b.center[0], b.center[1] + .1);
+  }), "walking through the old HQ interior must require the entrance arrow");
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ before, inside, moved, passed: "round trip, exclusive rendering, independent collision, continuous map position/heading, failure/retry" }, null, 2));
+  console.log(JSON.stringify({ before, inside, moved, anchae, anchaeMoved, passed: "round trip, exclusive rendering, independent collision, continuous map position/heading, failure/retry" }, null, 2));
 } finally { await browser.close(); }

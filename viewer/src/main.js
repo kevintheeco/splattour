@@ -855,7 +855,7 @@ async function main() {
   nav.addEventListener("depart", () => coach.did("move"));
   canvas.addEventListener("dblclick", () => coach.did("close"));
   canvas.addEventListener("wheel", () => coach.did("zoom"), { passive: true });
-  app?.start({ nav, look, rig, canvas, tour, scene, renderer, camera, occ, walkMap, splat, sceneName, loadScene: loadExtraScene, loadIndependent, activateIndependent, freeze: freezeScene }).catch((e) => console.warn("[app]", e));
+  app?.start({ nav, look, rig, canvas, tour, scene, renderer, camera, occ, walkMap, splat, sceneName, loadScene: loadExtraScene, loadIndependent, activateIndependent, waitIndependentFrame, freeze: freezeScene }).catch((e) => console.warn("[app]", e));
   viewerReady();
   if (progressive && streaming) upgradeToFull();
 
@@ -1002,6 +1002,18 @@ async function main() {
     } catch (error) { nextSplat?.dispose(); throw error; }
   }
 
+  async function waitIndependentFrame(context) {
+    const deadline = performance.now() + 15000;
+    do {
+      if (renderer.getContext().isContextLost()) throw new Error("WebGL context lost during scene transition");
+      await spark.update({ scene, camera });
+      const displayed = spark.display.mapping;
+      if (displayed.length === 1 && displayed[0].node === context.splat) return;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    } while (performance.now() < deadline);
+    throw new Error("Destination rendering timed out");
+  }
+
   function freezeScene(on) {
     sceneFrozen = on;
     nav.stop();
@@ -1052,6 +1064,8 @@ async function main() {
     scene.add(splat);
     rig.position.copy(position); rig.updateMatrixWorld(true);
     look.set(entrance.yaw, entrance.pitch ?? -.12);
+    look.update(0); // Input stays frozen, but render the destination camera immediately.
+    camera.updateMatrixWorld(true);
     Object.assign(stepper, { goal: null, anim: null, active: false, lastX: position.x, lastZ: position.z });
     $("#title").textContent = tour.title; $("#subtitle").textContent = tour.subtitle;
     $("#nodeName").textContent = definition.name;
