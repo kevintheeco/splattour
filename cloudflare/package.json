@@ -1,0 +1,6 @@
+{
+  "name": "pochak-worker",
+  "private": true,
+  "type": "module",
+  "dependencies": { "aws4fetch": "1.0.20" }
+}

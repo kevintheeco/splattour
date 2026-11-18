@@ -6,7 +6,7 @@ try {
  const page = await browser.newPage({viewport:{width:1280,height:900}});
  const errors=[]; page.on('pageerror',e=>errors.push(e.message));
  const assets=[]; page.on('response',r=>{if(r.url().includes('wolhajeong-anchae-warm-600'))assets.push([r.status(),r.url()]);});
- const url='https://3dgstour.com/tour.html?scene=wolhajeong-anchae-warm-600&from=cloud&quality=mobile&onboarding=0';
+ const url='https://pochak.kr/tour.html?scene=wolhajeong-anchae-warm-600&from=cloud&quality=mobile&onboarding=0';
  await page.goto(url);
  await page.waitForFunction(()=>window.splattour,null,{timeout:180000});
  await page.waitForTimeout(1500);
