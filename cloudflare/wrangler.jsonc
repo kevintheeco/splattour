@@ -1,0 +1,24 @@
+{
+  // pochak.kr (SplatTour): static site (viewer/dist) + upload API (worker.js).
+  // Cloudflare account: tinydots Inc. Deploy with cloudflare/deploy.sh, not by hand.
+  "name": "pochak",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "routes": [{ "pattern": "pochak.kr", "custom_domain": true }],
+  "assets": {
+    "directory": "../viewer/dist",
+    "binding": "ASSETS",
+    // The worker only runs for "/" (mapped to index.html) and the upload API.
+    // html_handling "none" keeps /tour.html as /tour.html, the same URLs as on Vercel.
+    "run_worker_first": ["/", "/api/*"],
+    "html_handling": "none"
+  },
+  "vars": {
+    "R2_ACCOUNT_ID": "cd727196f5be8c16a6d310f9cbe73b64",
+    "R2_BUCKET": "hanok360",
+    "R2_PUBLIC_URL": "https://media.pochak.kr"
+  }
+  // Secrets (npx wrangler secret put <NAME>): R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, UPLOAD_PASSWORD.
+  // Optional, cloud GPU training (spends money): RUNPOD_API_KEY, RUNNER_BUNDLE, RUNNER_VOCAB, RUNNER_PUBLIC_KEY, BUDGET_USD.
+}

@@ -1,0 +1,2 @@
+# Scene files live in R2 (bucket hanok360). Same rule the Vercel site had.
+/scenes/* https://media.pochak.kr/scenes/:splat 307

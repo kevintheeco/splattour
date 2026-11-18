@@ -25,18 +25,18 @@ Its SHA-256 is `108c05c3cef14401700c81ec4a1ba7dfbb810d3fbaa867d88d29dbdd15d07ff8
 Re-encoding it with `splattour.spz.ply_to_spz` and comparing decompressed SPZ
 bytes verified both existing web files: full SH3 / 2,000,000 splats and mobile
 SH1 / 1,500,000 splats. These assets were uploaded on 2026-10-06 to
-`https://media.3dgstour.com/scenes/wolhajeong-anchae-warm-600/`.
+`https://media.pochak.kr/scenes/wolhajeong-anchae-warm-600/`.
 The published tour omits a photos index because this local export has none.
 
 Model files are outside Git. A code PR does not publish model assets, and an
 open PR is not a deployed site. The model can already be opened independently:
-`https://3dgstour.com/tour.html?scene=wolhajeong-anchae-warm-600&from=cloud`.
+`https://pochak.kr/tour.html?scene=wolhajeong-anchae-warm-600&from=cloud`.
 
 Validation: `npm run build` in `viewer`, then from the repository root:
 
 ```sh
 node viewer/scripts/scene-links-check.mjs --url=http://127.0.0.1:5297
-node viewer/scripts/scene-links-check.mjs --url=http://127.0.0.1:5297 --origin=https://3dgstour.com --dist=/absolute/path/to/viewer/dist --cloud --mobile
+node viewer/scripts/scene-links-check.mjs --url=http://127.0.0.1:5297 --origin=https://pochak.kr --dist=/absolute/path/to/viewer/dist --cloud --mobile
 node viewer/scripts/anchae-remote-check.mjs
 ```
 
